@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Mode: test / signal / report / summary"
+        description: "Mode: test / signal / report / summary / menu"
         required: true
         default: "test"
 
@@ -51,6 +51,7 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WEBAPP_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
         run: python gotobi_bot.py "${{ steps.mode.outputs.mode }}"
 
       - name: Simpan catatan trade
