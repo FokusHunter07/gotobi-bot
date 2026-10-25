@@ -4,7 +4,7 @@ Gotobi v2 Paper-Trading Bot (USD/JPY) -> laporan ke Telegram
 Strategi : SELL USD/JPY jam 07:55 WIB, SL 10 pip, close jam 08:20 WIB
 Tanggal  : 5, 10, 15, 20, 25, 30 (hanya hari kerja, Senin-Jumat)
 Akun     : virtual, modal awal $100, risiko 1% per trade (compounding)
-Data     : Yahoo Finance, candle 1 menit (gratis, tanpa API key)
+Data     : Dukascopy tick bid/ask (utama) + Yahoo Finance 1 menit (cadangan), gratis tanpa API key
 
 Mode:
   python gotobi_bot.py signal   -> kirim pengingat sinyal (jika hari ini tanggal gotobi)
@@ -22,7 +22,9 @@ Variabel lingkungan (diisi lewat GitHub Secrets):
 import csv
 import datetime as dt
 import json
+import lzma
 import os
+import struct
 import sys
 import time
 
@@ -35,15 +37,15 @@ ENTRY_UTC = (0, 55)           # 07:55 WIB
 EXIT_UTC = (1, 20)            # 08:20 WIB
 SL_PIPS = 10
 PIP = 0.01
-SPREAD_PIPS = 1.0             # asumsi spread (konservatif) ditambahkan saat beli kembali
+SPREAD_PIPS = 1.0             # asumsi spread, hanya dipakai jika data dari Yahoo (tanpa harga ask)
 START_BALANCE = 100.0
 RISK_PCT = 1.0                # % saldo yang dirisikokan per trade
-LOOKBACK_DAYS = 7             # data 1 menit Yahoo hanya tersedia sekitar 7 hari terakhir
+LOOKBACK_DAYS = 7             # trade yang terlewat dalam 7 hari terakhir akan disusulkan
 TRADES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.csv")
 WIB = dt.timezone(dt.timedelta(hours=7))
 HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 FIELDS = ["tanggal", "hari", "entry", "stop_loss", "exit", "jam_keluar_wib", "hasil",
-          "pips", "R", "risiko_usd", "pl_usd", "saldo", "lot"]
+          "pips", "R", "risiko_usd", "pl_usd", "saldo", "lot", "sumber"]
 
 
 # ---------------- TELEGRAM ----------------
@@ -91,67 +93,123 @@ def next_gotobi(from_date):
 
 
 # ---------------- DATA HARGA ----------------
-def fetch_bars(d):
-    """Ambil candle 1 menit USD/JPY untuk tanggal d (UTC) antara 00:30-01:45.
-    Hasil: dict {datetime_utc_menit: (open, high, low, close)}"""
+# Setiap candle 1 menit disimpan sebagai dict: bo/bh/bl/bc = bid open/high/low/close,
+# ao/ah = ask open/high. Posisi SELL dibuka di harga bid, ditutup (beli kembali) di harga ask.
+UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
+
+
+class DataNotReady(Exception):
+    """Data untuk jam yang dibutuhkan belum dipublikasikan sumber data."""
+
+
+def fetch_dukascopy(d):
+    """Sumber utama: data tick Dukascopy (bid & ask asli, gratis).
+    File per jam baru tersedia sekitar 30-90 menit setelah jam itu berakhir."""
+    bars = {}
+    for hour in (0, 1):
+        url = (f"https://datafeed.dukascopy.com/datafeed/USDJPY/"
+               f"{d.year}/{d.month - 1:02d}/{d.day:02d}/{hour:02d}h_ticks.bi5")
+        r = requests.get(url, headers=UA, timeout=30)
+        if r.status_code == 404:
+            raise DataNotReady(f"Dukascopy jam {hour:02d} UTC belum tersedia")
+        r.raise_for_status()
+        if not r.content:
+            continue  # tidak ada tick (pasar tutup)
+        raw = lzma.decompress(r.content)
+        base = dt.datetime(d.year, d.month, d.day, hour, tzinfo=dt.timezone.utc)
+        for off in range(0, len(raw) - 19, 20):
+            ms, ask, bid, _av, _bv = struct.unpack(">IIIff", raw[off:off + 20])
+            ask, bid = ask / 1000.0, bid / 1000.0
+            t = (base + dt.timedelta(milliseconds=ms)).replace(second=0, microsecond=0)
+            b = bars.get(t)
+            if b is None:
+                bars[t] = {"bo": bid, "bh": bid, "bl": bid, "bc": bid, "ao": ask, "ah": ask}
+            else:
+                b["bh"] = max(b["bh"], bid); b["bl"] = min(b["bl"], bid); b["bc"] = bid
+                b["ah"] = max(b["ah"], ask)
+    return bars
+
+
+def fetch_yahoo(d):
+    """Sumber cadangan: Yahoo Finance candle 1 menit (tanpa harga ask -> pakai asumsi spread)."""
     start = int(utc_dt(d, (0, 30)).timestamp())
     end = int(utc_dt(d, (1, 45)).timestamp())
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{SYMBOL}"
     params = {"interval": "1m", "period1": start, "period2": end, "includePrePost": "false"}
-    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                             "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
     last_err = None
     for host in ("query1", "query2"):
         try:
-            r = requests.get(url.replace("query1", host), params=params, headers=headers, timeout=30)
+            r = requests.get(f"https://{host}.finance.yahoo.com/v8/finance/chart/{SYMBOL}",
+                             params=params, headers=UA, timeout=30)
             r.raise_for_status()
             res = r.json()["chart"]["result"]
             if not res:
                 return {}
             res = res[0]
-            ts = res.get("timestamp") or []
             q = res["indicators"]["quote"][0]
+            sp = SPREAD_PIPS * PIP
             bars = {}
-            for i, t in enumerate(ts):
+            for i, t in enumerate(res.get("timestamp") or []):
                 o, h, l, c = q["open"][i], q["high"][i], q["low"][i], q["close"][i]
                 if None in (o, h, l, c):
                     continue
                 key = dt.datetime.fromtimestamp(t, dt.timezone.utc).replace(second=0, microsecond=0)
-                bars[key] = (float(o), float(h), float(l), float(c))
+                bars[key] = {"bo": o, "bh": h, "bl": l, "bc": c, "ao": o + sp, "ah": h + sp}
             return bars
         except Exception as e:  # noqa: BLE001
             last_err = e
             time.sleep(3)
-    raise RuntimeError(f"Gagal mengambil data Yahoo: {last_err}")
+    raise RuntimeError(f"Yahoo gagal: {last_err}")
+
+
+def fetch_bars(d):
+    """Coba Dukascopy dulu, lalu Yahoo. Kembalikan (bars, nama_sumber)."""
+    errors = []
+    try:
+        bars = fetch_dukascopy(d)
+        if bars:
+            return bars, "Dukascopy"
+        errors.append("Dukascopy: data kosong")
+    except DataNotReady as e:
+        errors.append(str(e))
+    except Exception as e:  # noqa: BLE001
+        errors.append(f"Dukascopy error: {e}")
+    try:
+        bars = fetch_yahoo(d)
+        if bars:
+            return bars, "Yahoo"
+        errors.append("Yahoo: data kosong")
+    except Exception as e:  # noqa: BLE001
+        errors.append(str(e))
+    raise RuntimeError(" | ".join(errors))
 
 
 # ---------------- SIMULASI ----------------
-def simulate(d, bars, balance):
-    """Simulasikan satu trade SELL. Kembalikan dict baris trade atau None jika data tidak cukup."""
+def simulate(d, bars, balance, source=""):
+    """Simulasikan satu trade SELL. Kembalikan dict baris trade atau None jika data belum cukup."""
     entry_t = utc_dt(d, ENTRY_UTC)
     exit_t = utc_dt(d, EXIT_UTC)
 
-    # harga entry = open candle 00:55 UTC (toleransi 3 menit jika candle kosong)
+    # harga entry = bid open candle 00:55 UTC (toleransi 3 menit jika candle kosong)
     entry = None
     for k in range(4):
         b = bars.get(entry_t + dt.timedelta(minutes=k))
         if b:
-            entry = b[0]
+            entry = b["bo"]
             entry_t = entry_t + dt.timedelta(minutes=k)
             break
     if entry is None:
         return None
-    # harus ada data mendekati jam exit, kalau tidak berarti data belum lengkap
+    # harus ada data sampai mendekati jam exit, kalau tidak berarti data belum lengkap
     if not any(t >= exit_t - dt.timedelta(minutes=2) for t in bars):
         return None
 
-    spread = SPREAD_PIPS * PIP
     sl = entry + SL_PIPS * PIP
     hit_t = None
     t = entry_t
     while t < exit_t:
         b = bars.get(t)
-        if b and b[1] + spread >= sl:      # harga ask (high + spread) menyentuh SL
+        if b and b["ah"] >= sl - 1e-9:      # harga ask menyentuh SL
             hit_t = t
             break
         t += dt.timedelta(minutes=1)
@@ -162,11 +220,10 @@ def simulate(d, bars, balance):
     else:
         b = bars.get(exit_t)
         if b:
-            px = b[0]
+            exit_price = b["ao"]
         else:
-            prev = [k for k in bars if k < exit_t]
-            px = bars[max(prev)][3]
-        exit_price = px + spread
+            prev = max(k for k in bars if k < exit_t)
+            exit_price = bars[prev]["bc"] + (bars[prev]["ao"] - bars[prev]["bo"])
         pips = round((entry - exit_price) / PIP, 1)
         hasil = "Close 08:20"
         jam = exit_t.astimezone(WIB).strftime("%H:%M")
@@ -179,7 +236,7 @@ def simulate(d, bars, balance):
         "tanggal": d.isoformat(), "hari": HARI[d.weekday()], "entry": f"{entry:.3f}",
         "stop_loss": f"{sl:.3f}", "exit": f"{exit_price:.3f}", "jam_keluar_wib": jam,
         "hasil": hasil, "pips": f"{pips:.1f}", "R": f"{R:.2f}", "risiko_usd": f"{risk_usd:.2f}",
-        "pl_usd": f"{pl:.2f}", "saldo": f"{balance + pl:.2f}", "lot": f"{lot:.4f}",
+        "pl_usd": f"{pl:.2f}", "saldo": f"{balance + pl:.2f}", "lot": f"{lot:.4f}", "sumber": source,
     }
 
 
@@ -258,11 +315,11 @@ def cmd_report():
             continue  # trade hari ini belum selesai
         balance = float(sorted(trades, key=lambda r: r["tanggal"])[-1]["saldo"]) if trades else START_BALANCE
         try:
-            bars = fetch_bars(d)
+            bars, source = fetch_bars(d)
         except RuntimeError as e:
-            print(e)
+            print(f"{d}: data belum bisa diambil -> {e}. Akan dicoba lagi di jadwal berikutnya.")
             continue
-        row = simulate(d, bars, balance)
+        row = simulate(d, bars, balance, source)
         if row is None:
             print(f"{d}: data belum lengkap / pasar tutup, coba lagi nanti.")
             continue
@@ -280,7 +337,8 @@ def cmd_report():
             f"SELL @ {r['entry']} | SL {r['stop_loss']}\n"
             f"Keluar @ {r['exit']} jam {r['jam_keluar_wib']} WIB ({r['hasil']})\n"
             f"Hasil: <b>{float(r['pips']):+.1f} pip = {float(r['R']):+.2f}R = ${float(r['pl_usd']):+.2f}</b>\n"
-            f"Lot simulasi: {r['lot']} (risiko ${r['risiko_usd']})\n\n" + stats_text(trades))
+            f"Lot simulasi: {r['lot']} (risiko ${r['risiko_usd']}) · data: {r.get('sumber', '-')}\n\n"
+            + stats_text(trades))
     nxt = next_gotobi(dt.datetime.now(WIB).date() + dt.timedelta(days=1))
     if nxt:
         send_telegram(f"📅 Jadwal berikutnya: {HARI[nxt.weekday()]}, {nxt:%d-%m-%Y} jam 07:55 WIB")
