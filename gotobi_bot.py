@@ -110,7 +110,18 @@ def fetch_dukascopy(d):
     for hour in (0, 1):
         url = (f"https://datafeed.dukascopy.com/datafeed/USDJPY/"
                f"{d.year}/{d.month - 1:02d}/{d.day:02d}/{hour:02d}h_ticks.bi5")
-        r = requests.get(url, headers=UA, timeout=30)
+        r = None
+        for attempt in range(6):                     # server kadang sibuk (503) -> coba ulang
+            try:
+                r = requests.get(url, headers=UA, timeout=30)
+                if r.status_code < 500 and r.status_code != 429:
+                    break
+                print(f"Dukascopy jam {hour:02d}: HTTP {r.status_code}, coba lagi ({attempt + 1}/6)")
+            except requests.RequestException as e:
+                print(f"Dukascopy jam {hour:02d}: {e}, coba lagi ({attempt + 1}/6)")
+            time.sleep(5 * (attempt + 1))
+        if r is None:
+            raise RuntimeError("Dukascopy tidak bisa dihubungi")
         if r.status_code == 404:
             raise DataNotReady(f"Dukascopy jam {hour:02d} UTC belum tersedia")
         r.raise_for_status()
