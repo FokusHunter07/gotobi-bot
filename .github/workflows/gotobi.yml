@@ -1,0 +1,64 @@
+name: Gotobi Paper Trading Bot
+
+on:
+  schedule:
+    - cron: "20 0 * * 1-5"   # 07:20 WIB  -> pengingat sinyal (hanya jika tanggal gotobi)
+    - cron: "35 1 * * 1-5"   # 08:35 WIB  -> simulasi & laporan hasil
+    - cron: "30 3 * * 1-5"   # 10:30 WIB  -> cadangan (jika jadwal sebelumnya telat/gagal)
+    - cron: "0 12 * * 1-5"   # 19:00 WIB  -> cadangan kedua
+    - cron: "0 2 1 * *"      # tgl 1 tiap bulan 09:00 WIB -> ringkasan bulanan
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode: test / signal / report / summary"
+        required: true
+        default: "test"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gotobi-bot
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Tentukan mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ github.event.inputs.mode }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "20 0 * * 1-5" ]; then
+            echo "mode=signal" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 2 1 * *" ]; then
+            echo "mode=summary" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=report" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Jalankan bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python gotobi_bot.py "${{ steps.mode.outputs.mode }}"
+
+      - name: Simpan catatan trade
+        run: |
+          if [ -f trades.csv ] && [ -n "$(git status --porcelain trades.csv)" ]; then
+            git config user.name "gotobi-bot"
+            git config user.email "gotobi-bot@users.noreply.github.com"
+            git add trades.csv
+            git commit -m "Catat trade gotobi $(date -u +%Y-%m-%d)"
+            git push
+          fi
