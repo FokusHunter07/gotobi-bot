@@ -3,7 +3,8 @@ name: Gotobi Paper Trading Bot
 on:
   schedule:
     - cron: "20 0 * * 1-5"   # 07:20 WIB  -> pengingat sinyal (hanya jika tanggal gotobi)
-    - cron: "35 1 * * 1-5"   # 08:35 WIB  -> simulasi & laporan hasil
+    - cron: "35 1 * * 1-5"   # 08:35 WIB  -> percobaan laporan pertama
+    - cron: "40 2 * * 1-5"   # 09:40 WIB  -> laporan hasil (data Dukascopy biasanya sudah tersedia)
     - cron: "30 3 * * 1-5"   # 10:30 WIB  -> cadangan (jika jadwal sebelumnya telat/gagal)
     - cron: "0 12 * * 1-5"   # 19:00 WIB  -> cadangan kedua
     - cron: "0 2 1 * *"      # tgl 1 tiap bulan 09:00 WIB -> ringkasan bulanan
