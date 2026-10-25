@@ -11,14 +11,17 @@ Mode:
   python gotobi_bot.py report   -> simulasikan trade yang belum tercatat (7 hari terakhir) & kirim hasil
   python gotobi_bot.py summary  -> kirim ringkasan performa keseluruhan
   python gotobi_bot.py test     -> kirim pesan uji ke Telegram
+  python gotobi_bot.py menu     -> pasang tombol menu 'Kantor' (Mini App) di chat bot
 
 Variabel lingkungan (diisi lewat GitHub Secrets):
   TELEGRAM_TOKEN   = token bot dari @BotFather
   TELEGRAM_CHAT_ID = chat id Anda
+  WEBAPP_URL       = alamat halaman Kantor (otomatis diisi oleh workflow)
 """
 
 import csv
 import datetime as dt
+import json
 import os
 import sys
 import time
@@ -44,6 +47,9 @@ FIELDS = ["tanggal", "hari", "entry", "stop_loss", "exit", "jam_keluar_wib", "ha
 
 
 # ---------------- TELEGRAM ----------------
+WEBAPP_URL = os.environ.get("WEBAPP_URL", "").strip()   # alamat halaman Kantor (GitHub Pages)
+
+
 def send_telegram(text):
     token = os.environ.get("TELEGRAM_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
@@ -51,10 +57,13 @@ def send_telegram(text):
         print("[DRY-RUN] TELEGRAM_TOKEN/CHAT_ID belum diisi. Pesan:\n" + text)
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
+    data = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": "true"}
+    if WEBAPP_URL:
+        data["reply_markup"] = json.dumps({"inline_keyboard": [[
+            {"text": "🏢 Buka Kantor", "web_app": {"url": WEBAPP_URL}}]]})
     for attempt in range(3):
         try:
-            r = requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML",
-                                         "disable_web_page_preview": "true"}, timeout=20)
+            r = requests.post(url, data=data, timeout=20)
             if r.ok:
                 return
             print("Telegram error:", r.status_code, r.text)
@@ -287,11 +296,30 @@ def cmd_summary():
     send_telegram(txt)
 
 
+def cmd_menu():
+    """Pasang tombol menu 'Kantor' di chat bot (cukup dijalankan sekali)."""
+    token = os.environ.get("TELEGRAM_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if not (token and chat_id and WEBAPP_URL):
+        print("TELEGRAM_TOKEN, TELEGRAM_CHAT_ID dan WEBAPP_URL harus terisi.")
+        sys.exit(1)
+    r = requests.post(f"https://api.telegram.org/bot{token}/setChatMenuButton", data={
+        "chat_id": chat_id,
+        "menu_button": json.dumps({"type": "web_app", "text": "Kantor", "web_app": {"url": WEBAPP_URL}})},
+        timeout=20)
+    print(r.status_code, r.text)
+    if not r.ok:
+        sys.exit(1)
+    send_telegram("🏢 Tombol <b>Kantor</b> sudah terpasang di kiri bawah kolom chat. "
+                  "Tekan untuk melihat Goto bekerja!")
+
+
 def cmd_test():
     send_telegram("✅ Bot Gotobi aktif dan terhubung ke Telegram Anda.\n" + stats_text(load_trades()))
 
 
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "report"
-    {"signal": cmd_signal, "report": cmd_report, "summary": cmd_summary, "test": cmd_test}.get(
+    {"signal": cmd_signal, "report": cmd_report, "summary": cmd_summary, "test": cmd_test,
+     "menu": cmd_menu}.get(
         mode, cmd_report)()
