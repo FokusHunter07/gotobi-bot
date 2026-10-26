@@ -203,11 +203,27 @@ function parseCSV(t){
   const L=t.trim().split(/\r?\n/); if(L.length<2) return [];
   const h=L[0].split(","); return L.slice(1).filter(Boolean).map(l=>{const v=l.split(",");const o={};h.forEach((k,i)=>o[k]=v[i]||"");return o});
 }
+// Catatan trade dibaca langsung dari repo (raw.githubusercontent.com), karena halaman GitHub Pages
+// tidak ikut diperbarui saat bot menyimpan trade. Jika gagal, pakai salinan di halaman ini.
+function rawBase(){
+  const h=location.hostname, m=h.match(/^([^.]+)\.github\.io$/i);
+  if(!m) return null;
+  const repo=(location.pathname.split("/").filter(Boolean)[0])||(m[1]+".github.io");
+  return `https://raw.githubusercontent.com/${m[1]}/${repo}/main/`;
+}
+async function getText(file){
+  const raw=rawBase(), urls=[];
+  if(raw) urls.push(raw+file+"?t="+Date.now());
+  urls.push(file+"?t="+Date.now());
+  for(const u of urls){
+    try{ const r=await fetch(u,{cache:"no-store"}); if(r.ok) return await r.text(); }catch(e){}
+  }
+  throw new Error("tidak bisa dibaca");
+}
 async function loadAll(){
   let ok=0;
   await Promise.all(ORDER.map(async k=>{
-    try{ const r=await fetch(BOTS[k].file+"?t="+Date.now(),{cache:"no-store"}); if(!r.ok) throw 0;
-         TR[k]=parseCSV(await r.text()).sort((a,b)=>a.tanggal<b.tanggal?-1:1); ok++; }
+    try{ TR[k]=parseCSV(await getText(BOTS[k].file)).sort((a,b)=>a.tanggal<b.tanggal?-1:1); ok++; }
     catch(e){ TR[k]=[]; }
   }));
   $("updated").textContent = ok ? "Diperbarui "+fmtTime(wib())+" WIB" : "Belum ada catatan trade";
