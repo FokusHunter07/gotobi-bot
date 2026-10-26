@@ -1,0 +1,46 @@
+name: Unduh Data Forex
+
+on:
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: "Simbol (contoh: USDJPY, XAUUSD, EURUSD)"
+        required: true
+        default: "USDJPY"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gotobi-bot
+  cancel-in-progress: false
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Unduh data dari Dukascopy
+        run: python fx_data.py "${{ github.event.inputs.symbol }}"
+
+      - name: Simpan data
+        run: |
+          git config user.name "gotobi-bot"
+          git config user.email "gotobi-bot@users.noreply.github.com"
+          git add data/*.csv.gz
+          if git diff --cached --quiet; then
+            echo "Tidak ada data baru."
+          else
+            git commit -m "Data ${{ github.event.inputs.symbol }} $(date -u +%Y-%m-%d)"
+            git pull --rebase
+            git push
+          fi
