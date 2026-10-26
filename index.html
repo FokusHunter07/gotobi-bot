@@ -148,7 +148,7 @@ header small{display:block;color:var(--muted);font-size:12px;font-weight:600;mar
 <section class="board" id="board"></section>
 
 <section class="room" id="room">
-  <svg id="scene" viewBox="0 0 400 330" aria-label="Kantor animasi empat bot"></svg>
+  <svg id="scene" viewBox="0 0 400 330" aria-label="Kantor animasi enam bot"></svg>
   <div class="bubble hide" id="bubble"><b id="who">GOTO</b><span id="say">…</span></div>
   <div id="tags"></div>
 </section>
@@ -181,12 +181,18 @@ const BOTS = {
   kamis: {nama:"Kamis", emoji:"🌙", pasar:"USD/JPY", file:"trades_kamis.csv", unit:"pip", color:"#a9b8ff",
           head:"#a3b3ef", cap:"#8597df", body:"#3f4a8c", arm:"#37417c", desk:"#5966ad",
           aturan:"BUY tiap Kamis 02:15 WIB · SL 10 pip · close 02:50 WIB"},
+  jumat: {nama:"Jumat", emoji:"🎉", pasar:"USD/JPY", file:"trades_jumat.csv", unit:"pip", color:"#ff9ec4",
+          head:"#f6c4d3", cap:"#e690ab", body:"#c8668a", arm:"#b85a7c", desk:"#c8668a",
+          aturan:"BUY tiap Jumat 22:40 WIB · SL 15 pip · TP 15 pip · close Sabtu 02:40 WIB"},
+  senin: {nama:"Senin", emoji:"☕", pasar:"USD/JPY", file:"trades_senin.csv", unit:"pip", color:"#8fd8b4",
+          head:"#d3eadc", cap:"#a0cfb3", body:"#4f9a7a", arm:"#448a6c", desk:"#4f9a7a",
+          aturan:"BUY tiap Senin 14:50 WIB · SL 20 pip · TP 20 pip · close 22:50 WIB"},
   emas:  {nama:"Emas",  emoji:"🥇", pasar:"XAU/USD", file:"trades_emas.csv",  unit:"$",   color:"#ffd56b",
           head:"#f3dc9b", cap:"#e2bd5c", body:"#c9a24a", arm:"#b8933e", desk:"#c9a24a",
           aturan:"BUY 16:30 New York (03:30/04:30 WIB) Sen–Kam NY · SL 0,5×ATR · TP 1R · close 03:00 NY (14:00/15:00 WIB)"},
 };
-const ORDER = ["goto","asli","kamis","emas"];
-let TR = {goto:[],asli:[],kamis:[],emas:[]};
+const ORDER = ["goto","asli","kamis","jumat","senin","emas"];
+let TR = {}; ORDER.forEach(k=>TR[k]=[]);
 let TAB = "tim";
 try{ TAB = localStorage.getItem("kantorTab") || "tim"; }catch(e){}
 
@@ -277,26 +283,29 @@ function countUp(el,to,fmt){
   const step=now=>{ const k=Math.min(1,(now-t0)/dur), e=1-Math.pow(1-k,3); el.textContent=fmt(from+(to-from)*e); if(k<1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
 }
-/* ===================== AKUN TIM (satu dompet untuk 4 bot) ===================== */
-const DEF_IN={goto:"07:55",asli:"07:55",kamis:"02:15",emas:"03:30"}, DEF_OUT={goto:"08:20",asli:"08:30",kamis:"02:50",emas:"14:00"};
+/* ===================== AKUN TIM (satu dompet untuk 5 bot USD/JPY) ===================== */
+const DEF_IN={goto:"07:55",asli:"07:55",kamis:"02:15",jumat:"22:40",senin:"14:50",emas:"03:30"}, DEF_OUT={goto:"08:20",asli:"08:30",kamis:"02:50",jumat:"02:40",senin:"22:50",emas:"14:00"};
 function depDates(){ const out=[]; for(let k=1;k<300;k++){ let y=SIM_START[0], m=SIM_START[1]+DEP_EVERY*k; y+=Math.floor(m/12); m%=12;
   const last=new Date(Date.UTC(y,m+1,0)).getUTCDate(); const d=Date.UTC(y,m,Math.min(SIM_START[2],last)); if(d>Date.now()+864e5) break; out.push(d);} return out; }
-const TEAM=["goto","asli","kamis"];          // Emas tidak ikut: lot 0,01 emas terlalu besar untuk modal kecil
-const lotRisk = e => 100/e;                   // risiko $ untuk 0,01 lot USD/JPY dengan SL 10 pip
+const TEAM=["goto","asli","kamis","jumat","senin"];   // Emas tidak ikut: lot 0,01 emas terlalu besar untuk modal kecil
+const SLP={goto:10,asli:10,kamis:10,jumat:15,senin:20};  // SL tiap bot (pip)
+const lotRisk = (e,sl=10) => sl*10/e;                    // risiko $ untuk 0,01 lot USD/JPY
 function team(){
   const ts=(d,hm)=>{const [h,m]=(hm||"00:00").split(":").map(Number);return Date.parse(d+"T00:00:00Z")+(h*60+m)*6e4;};
-  const ev=[]; TEAM.forEach(k=>TR[k].forEach(t=>ev.push({k,t,R:+t.R,ent:ts(t.tanggal,t.jam_entry_wib||DEF_IN[k]),ex:ts(t.tanggal,t.jam_keluar_wib||DEF_OUT[k])})));
+  const ev=[]; TEAM.forEach(k=>TR[k].forEach(t=>{ const ent=ts(t.tanggal,t.jam_entry_wib||DEF_IN[k]); let ex=ts(t.tanggal,t.jam_keluar_wib||DEF_OUT[k]);
+    if(ex<ent) ex+=864e5;                        // Jumat: tutup hari Sabtu
+    ev.push({k,t,R:+t.R,ent,ex}); }));
   ev.sort((a,b)=>a.ent-b.ent||ORDER.indexOf(a.k)-ORDER.indexOf(b.k));
   const deps=depDates().map(d=>d+12*3.6e6); let di=0;
-  let bal=START, dep=START; const open=[], map={}, per={goto:0,asli:0,kamis:0}, curve=[[ev.length?ev[0].ent:Date.now(),bal]];
-  const realize=t=>{ open.sort((a,b)=>a.ex-b.ex); while(open.length&&open[0].ex<=t){ const o=open.shift(); bal+=o.pl; curve.push([o.ex,bal]); } };
+  let bal=START, dep=START; const open=[], map={}, per={}, curve=[[ev.length?ev[0].ent:Date.now(),bal]];
+  const realize=t=>{ open.sort((a,b)=>a.ex-b.ex); while(open.length&&open[0].ex<=t){ const o=open.shift(); bal=Math.round((bal+o.pl)*100)/100; curve.push([o.ex,bal]); } };
   let idx=1,pk=1,dd=0,wins=0;
   for(const e of ev){
     realize(e.ent);
     while(di<deps.length&&deps[di]<=e.ent){ bal+=DEPOSIT; dep+=DEPOSIT; di++; curve.push([e.ent,bal]); }
-    const risk=Math.max(1,bal*0.01), price=+e.t.entry||155, n=Math.max(1,Math.floor(risk/lotRisk(price)+1e-9));
+    const risk=Math.max(1,bal*0.01), price=+e.t.entry||155, n=Math.max(1,Math.floor(risk/lotRisk(price,SLP[e.k])+1e-9));
     const pl=Math.round(n*(+e.t.pips)*(10/price)*100)/100;
-    open.push({ex:e.ex,pl}); map[e.k+"|"+e.t.tanggal]=pl; per[e.k]+=pl;
+    open.push({ex:e.ex,pl}); map[e.k+"|"+e.t.tanggal]=pl; per[e.k]=(per[e.k]||0)+pl;
     idx*=1+0.01*e.R; pk=Math.max(pk,idx); dd=Math.min(dd,(idx-pk)/pk); if(e.R>0) wins++;
   }
   realize(Infinity);
@@ -319,9 +328,9 @@ function spark(curve){
 }
 function renderBoard(animate){
   if(TAB==="tim"){
-    const t=team(); const maxAbs=Math.max(0.01,...TEAM.map(k=>Math.abs(t.per[k])));
-    $("board").innerHTML=`<div class="top"><span>🤝 Akun Tim</span><b>3 bot USD/JPY, 1 dompet</b></div>
-     <div class="rule">Goto, Asli, dan Kamis memakai saldo yang sama, seperti EA nanti. Target risiko 1% saldo (minimal $1), dibulatkan ke lot 0,01. Lot berikutnya ${t.lot.toFixed(2)} (risiko ${money(t.risk)}). Setoran $${DEPOSIT} tiap 2 bulan. Emas tidak ikut sampai modal sekitar $3.300.</div>
+    const t=team(); const maxAbs=Math.max(0.01,...TEAM.map(k=>Math.abs(t.per[k]||0)));
+    $("board").innerHTML=`<div class="top"><span>🤝 Akun Tim</span><b>5 bot USD/JPY, 1 dompet</b></div>
+     <div class="rule">Goto, Asli, Kamis, Jumat, dan Senin memakai saldo yang sama, seperti EA nanti. Target risiko 1% saldo (minimal $1), dibulatkan ke lot 0,01. Lot berikutnya ${t.lot.toFixed(2)} (risiko ${money(t.risk)} untuk SL 10 pip). Setoran $${DEPOSIT} tiap 2 bulan. Emas tidak ikut sampai modal sekitar $3.300.</div>
      <div class="stats">
       <div class="stat"><span>Saldo tim</span><strong id="cBal">${money(t.bal)}</strong></div>
       <div class="stat"><span>Profit bersih</span><strong id="cProfit" class="${t.profit>=0?'pos':'neg'}">${(t.profit>=0?"+":"")+money(t.profit)}</strong></div>
@@ -331,14 +340,14 @@ function renderBoard(animate){
       <div class="stat"><span>Max DD</span><strong>${(t.dd*100).toFixed(1)}%</strong></div>
      </div>
      ${spark(t.curve)}
-     <div class="contrib">${TEAM.map(k=>{const v=t.per[k],w=Math.abs(v)/maxAbs*50;
+     <div class="contrib">${TEAM.map(k=>{const v=t.per[k]||0,w=Math.abs(v)/maxAbs*50;
        return `<div class="cb"><span>${BOTS[k].emoji} ${BOTS[k].nama}</span><div class="bar"><i class="${v>=0?'p':'n'}" style="width:${w}%;${v>=0?'left:50%':'right:50%'}"></i></div><b class="${v>=0?'pos':'neg'}">${(v>=0?"+":"")+money(v)}</b></div>`}).join("")}</div>`;
     if(animate){ countUp($("cProfit"),t.profit,v=>(v>=0?"+":"")+money(v)); countUp($("cBal"),t.bal,money); }
     return;
   }
   if(TAB==="all"){
     const rows=ORDER.map(k=>({k,s:stats(TR[k])})).sort((a,b)=>(b.s.n?b.s.ret:-1e9)-(a.s.n?a.s.ret:-1e9));
-    const medal=["🥇","🥈","🥉","4️⃣"];
+    const medal=["🥇","🥈","🥉","4️⃣","5️⃣","6️⃣"];
     $("board").innerHTML=`<div class="top"><span>Klasemen</span><b>profit dari total setoran</b></div><ul class="rank">`+
       rows.map((r,i)=>{const b=BOTS[r.k],s=r.s;
         return `<li><span class="m">${medal[i]}</span><div class="n">${b.emoji} ${b.nama}<small>${b.pasar}, ${s.n} trade, menang ${s.n?s.wr.toFixed(0)+"%":"–"}</small></div>
@@ -385,6 +394,12 @@ function nextKamis(){         // Kamis 02:15 WIB = Rabu 19:15 UTC
   let d=Date.UTC(w.getUTCFullYear(),w.getUTCMonth(),w.getUTCDate(),19,15)-864e5;
   for(let i=0;i<10;i++){ if(d>now && new Date(d).getUTCDay()===3) return new Date(d); d+=864e5; }
 }
+function nextWeekly(dowUtc,h,m){   // hari & jam UTC
+  const now=Date.now(); const n=new Date(); let d=Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate(),h,m);
+  for(let i=0;i<9;i++){ if(d>now && new Date(d).getUTCDay()===dowUtc) return new Date(d); d+=864e5; }
+}
+const nextJumat = () => nextWeekly(5,15,40);   // Jumat 22:40 WIB
+const nextSenin = () => nextWeekly(1,7,50);    // Senin 14:50 WIB
 function nextEmas(){          // 16:30 New York, Senin-Kamis
   const now=new Date(); const p=nyParts(now);
   for(let i=0;i<8;i++){
@@ -406,7 +421,7 @@ function nextDeposit(){
 }
 function renderSched(){
   const g=nextGotobi(), ka=nextKamis(), em=nextEmas();
-  const rows=[["goto",g,"SELL USD/JPY"],["asli",g,"SELL USD/JPY"],["kamis",ka,"BUY USD/JPY"],["emas",em,"BUY XAU/USD"]]
+  const rows=[["goto",g,"SELL USD/JPY"],["asli",g,"SELL USD/JPY"],["kamis",ka,"BUY USD/JPY"],["jumat",nextJumat(),"BUY USD/JPY"],["senin",nextSenin(),"BUY USD/JPY"],["emas",em,"BUY XAU/USD"]]
     .filter(r=>(TAB==="all"||TAB==="tim")||TAB===r[0]).sort((a,b)=>a[1]-b[1]);
   $("sched").innerHTML=rows.map(([k,t,a])=>`<li><div class="w">${BOTS[k].emoji} ${BOTS[k].nama} <span style="color:var(--muted);font-weight:700">${a}</span><small>${fmtWib(t)}</small></div><div class="c">${countdown(t)}</div></li>`).join("");
   const nd=nextDeposit(); $("nextDep").innerHTML=`Setoran virtual berikutnya <b>$${DEPOSIT} per bot</b> pada ${nd.getUTCDate()} ${BULAN[nd.getUTCMonth()]} ${nd.getUTCFullYear()}`;
@@ -427,8 +442,8 @@ function plant(x,y){
   return box(x,y,0,.7,.7,.8,"#7a7f9e","#666b8a","#555a78")+
     `<g class="bob" style="animation-duration:${3+Math.random()*2}s"><circle cx="${sx}" cy="${sy-7}" r="11" fill="#6aae8c"/><circle cx="${sx-4}" cy="${sy-11}" r="6" fill="#86c7a3"/></g>`;
 }
-const DESK={asli:[0.7,0.5],goto:[5.6,0.5],kamis:[0.7,5.5],emas:[5.6,5.5]};
-const ANCH={};
+const DESK={asli:[0.3,0.5],goto:[3.55,0.5],kamis:[6.8,0.5],jumat:[0.3,5.5],senin:[3.55,5.5],emas:[6.8,5.5]};
+const ANCH={}; const BUYS=["kamis","jumat","senin"];
 function desk(k){
   const b=BOTS[k],[x,y]=DESK[k];
   let s=box(x,y,0,2.8,1.2,1.5,"#f7f7fb","#e2e3ef","#cfd1e2");
@@ -436,7 +451,7 @@ function desk(k){
   s+=box(x+.55,y+.2,1.5,1.7,.22,1.35,"#3a3f5c","#2c3150","#343a5a");                       // monitor
   s+=poly(pts([x+.65,y+.42,1.62],[x+2.15,y+.42,1.62],[x+2.15,y+.42,2.75],[x+.65,y+.42,2.75]),"#1f2440");
   const line = k==="emas" ? `<polyline class="chartline" fill="none" stroke="#e9c483" stroke-width="1.5" points="${pts([x+.8,y+.42,2.0],[x+1.1,y+.42,2.3],[x+1.4,y+.42,2.15],[x+1.7,y+.42,2.55],[x+2.0,y+.42,2.45])}"/>`
-            : `<polyline class="chartline" fill="none" stroke="${k==='kamis'?'#8fd1b0':'#ec9a9a'}" stroke-width="1.5" points="${k==='kamis'?pts([x+.8,y+.42,2.0],[x+1.1,y+.42,2.2],[x+1.4,y+.42,2.1],[x+1.7,y+.42,2.5],[x+2.0,y+.42,2.6]):pts([x+.8,y+.42,2.5],[x+1.1,y+.42,2.3],[x+1.4,y+.42,2.45],[x+1.7,y+.42,2.05],[x+2.0,y+.42,1.95])}"/>`;
+            : `<polyline class="chartline" fill="none" stroke="${BUYS.includes(k)?'#8fd1b0':'#ec9a9a'}" stroke-width="1.5" points="${BUYS.includes(k)?pts([x+.8,y+.42,2.0],[x+1.1,y+.42,2.2],[x+1.4,y+.42,2.1],[x+1.7,y+.42,2.5],[x+2.0,y+.42,2.6]):pts([x+.8,y+.42,2.5],[x+1.1,y+.42,2.3],[x+1.4,y+.42,2.45],[x+1.7,y+.42,2.05],[x+2.0,y+.42,1.95])}"/>`;
   s+=line;
   // mug / aksesori
   s+=box(x+2.3,y+.6,1.5,.3,.3,.4,"#fff","#e7e3ff","#d3cdf7");
@@ -448,6 +463,8 @@ function desk(k){
   const [cx,cy]=P(x+1.4,y+2.3,.85);
   const extra = k==="asli" ? `<rect x="-11" y="-44" width="22" height="5" rx="2.5" fill="#8a94ad"/>`
               : k==="kamis" ? `<path d="M-1 -52 a5 5 0 1 0 6 -5 a4 4 0 1 1 -6 5z" fill="#ffe08a"/>`
+              : k==="jumat" ? `<path d="M-6 -41 L0 -56 L6 -41 z" fill="#ffe08a" stroke="#e690ab" stroke-width="1"/><circle cx="0" cy="-57" r="2.4" fill="#ff9ec4"/>`
+              : k==="senin" ? `<path d="M-12 -32 a12 12 0 0 1 24 0" fill="none" stroke="#2f5a48" stroke-width="2.4"/><rect x="-14" y="-34" width="5" height="8" rx="2" fill="#2f5a48"/><rect x="9" y="-34" width="5" height="8" rx="2" fill="#2f5a48"/>`
               : k==="emas" ? `<path d="M-9 -44 l3 -7 l3 5 l3 -7 l3 7 l3 -5 l3 7 z" fill="#e6c56a" stroke="#b99447" stroke-width="1"/>`
               : `<line x1="0" y1="-45" x2="0" y2="-51" stroke="#3a3f5c" stroke-width="2"/><circle class="blink" cx="0" cy="-52" r="3" fill="#ec9a9a"/>`;
   s+=`<g id="bot_${k}" class="bob"><g transform="translate(${cx},${cy})">
@@ -459,7 +476,7 @@ function desk(k){
     </g></g>`;
   const [zx,zy]=P(x+1.4,y+2.3,4.2);
   s+=`<g id="zzz_${k}" class="zzz" style="display:none"><text x="${zx+6}" y="${zy}" fill="#fff" font-size="9">z</text><text x="${zx+10}" y="${zy-6}" fill="#fff" font-size="11">z</text><text x="${zx+14}" y="${zy-12}" fill="#fff" font-size="13">Z</text></g>`;
-  ANCH[k]={head:P(x+1.4,y+2.3,4.0), tag:P(x+1.4,y+3.4,0)};
+  ANCH[k]={head:P(x+1.4,y+2.3,4.0), tag: y<3 ? P(x+1.4,y+2.3,4.7) : P(x+1.4,y+2.9,-0.1)};
   return s;
 }
 function scene(){
@@ -489,14 +506,10 @@ function scene(){
       <line id="mh" x1="${ckx}" y1="${cky}" x2="${ckx}" y2="${cky-8}" stroke="#6a5ad8" stroke-width="1.4" stroke-linecap="round"/>`;
   s+=frame(6.8,4.3,1.9,1.4,`<polygon points="${pts([7.2,0,4.6],[8.3,0,4.6],[8.0,0,5.1],[7.5,0,5.1])}" fill="#e6c56a" stroke="#b99447" stroke-width="1"/>
      <text x="${P(7.75,0,5.3)[0]}" y="${P(7.75,0,5.3)[1]}" font-size="5.5" fill="#e9c483" text-anchor="middle">XAU</text>`);
-  // server rack di pojok belakang kanan
-  s+=box(9.0,.3,0,.8,.9,2.6,"#4f5478","#434866","#3a3f5c");
-  [0,1,2].forEach(i=>{const [x,y]=P(9.8,.75,.6+i*.7);s+=`<circle class="led" style="animation-delay:${i*.35}s" cx="${x+2}" cy="${y}" r="1.7" fill="${i?'#8fd1b0':'#9db2f2'}"/>`});
-  s+=plant(.2,.2);
   // meja: baris belakang dulu
-  s+=desk("asli")+desk("goto");
+  s+=desk("asli")+desk("goto")+desk("kamis");
   s+=plant(9.2,3.7);
-  s+=desk("kamis")+desk("emas");
+  s+=desk("jumat")+desk("senin")+desk("emas");
   // sofa kecil & tanaman depan
   s+=plant(9.2,9.2);
   $("scene").innerHTML=s;
@@ -537,6 +550,24 @@ const T = {
   hitung:["Posisi tutup 02:50. Nunggu data resmi… 🧮"],
   menang:["Cuan malam ini ✅ Begadangku nggak sia-sia 🌙","Satu poin lagi buat bukti polaku nyata!"],
   kalah:["Kena SL malam ini ❌ Datanya tetap aku catat.","Kalah ya nggak apa-apa. Tujuanku memang diuji."]},
+ jumat:{
+  bengong:["Orang pulang kerja Jumat malam, aku baru mulai kerja 🎉","Akhir pekan itu hadiah. Tapi BUY dulu sebelum hadiahnya 😏","Win rate-ku tiap tahun di atas 60%. Bukan kebetulan, semoga 🤞",
+           "SL 15, TP 15. Satu banding satu, adil kan?","Sabtu pagi aku sudah libur. Hidupku seimbang 😌"],
+  tidur:["Zzz… nanti malam Jumat aku lembur 😴","Zzz… TP 15 pip… zzz"],
+  siaga:["Jumat malam! 30 menit lagi BUY 👀","Pasar mau tutup minggu ini… waktunya aku 🎯"],
+  posisi:["BUY kebuka. Tahan sampai Sabtu 02:40 ⏳","Ayo naik 15 pip, terus kita libur 📈"],
+  hitung:["Posisi tutup Sabtu 02:40. Nunggu data resmi… 🧮"],
+  menang:["Cuan penutup minggu ✅ Selamat akhir pekan 🎉","TP kena! Weekend jadi manis 😎"],
+  kalah:["Kena SL ❌ Minggu depan coba lagi.","Satu kalah, akhir pekan tetap santai."]},
+ senin:{
+  bengong:["Senin itu berat buat manusia, buat aku malah jam kerja ☕","Sore Senin, Eropa buka, dolar biasanya bangun 😏","SL 20 TP 20. Aku sabar, posisiku 8 jam.",
+           "Tahun 2025 aku agak loyo, makanya aku diuji dulu 🧪","Kopi dulu, grafik kemudian ☕"],
+  tidur:["Zzz… bangunin Senin siang ya 😴","Zzz… kopi… zzz"],
+  siaga:["Senin siang! 30 menit lagi BUY 👀","Kopi siap, mata melek. Ayo kerja ☕"],
+  posisi:["BUY kebuka. Tahan sampai 22:50 ⏳","Pelan-pelan naik juga nggak apa-apa 📈"],
+  hitung:["Posisi tutup 22:50. Nunggu data resmi… 🧮"],
+  menang:["Senin cuan ✅ Minggu ini mulai manis ☕","TP 20 pip kena! 😎"],
+  kalah:["Kena SL ❌ Awal minggu yang kurang beruntung.","Kalah satu, aturan tetap aturan."]},
  emas:{
   bengong:["Emas suka naik pas Amerika tidur 😏","Divisi emas: aku sendirian, tapi bersinar 🥇","TP 1R itu sehat. Win rate bukan segalanya, bos!",
            "Kenapa nggak trading Jumat? Hindari libur akhir pekan 😌","Risiko 0,5 ATR… ukurannya ikut keadaan pasar."],
@@ -547,7 +578,7 @@ const T = {
   menang:["Emas bersinar ✅ Cuan masuk!","Pola malam emas jalan lagi 😎"],
   kalah:["Hari ini emas bandel ❌ Lanjut besok.","Kalah kecil, aturan tetap aturan."]},
 };
-function todayTrade(k){ const w=wib(); const d=w.toISOString().slice(0,10); return TR[k].find(t=>t.tanggal===d); }
+function todayTrade(k,back=0){ const w=new Date(wib().getTime()-back*864e5); const d=w.toISOString().slice(0,10); return TR[k].find(t=>t.tanggal===d); }
 function stateOf(k){
   const w=wib(), mins=w.getUTCHours()*60+w.getUTCMinutes(), dow=w.getUTCDay(), day=w.getUTCDate();
   const res = t => t ? (+t.R>0?"menang":"kalah") : "hitung";
@@ -567,6 +598,19 @@ function stateOf(k){
       if(mins>=170&&mins<600) return res(todayTrade(k));
     }
     return (mins>=540&&mins<1020)?"tidur":"bengong";
+  }
+  if(k==="jumat"){            // Jumat 22:40 -> Sabtu 02:40 WIB
+    if(dow===5&&mins>=1330&&mins<1360) return "siaga";
+    if((dow===5&&mins>=1360)||(dow===6&&mins<160)) return "posisi";
+    if(dow===6&&mins>=160&&mins<900) return res(todayTrade(k,1));
+    return (mins>=540&&mins<1020)?"tidur":"bengong";
+  }
+  if(k==="senin"){            // Senin 14:50 -> 22:50 WIB
+    if(dow===1&&mins>=860&&mins<890) return "siaga";
+    if(dow===1&&mins>=890&&mins<1370) return "posisi";
+    if(dow===1&&mins>=1370) return res(todayTrade(k));
+    if(dow===2&&mins<600) return res(todayTrade(k,1));
+    return mins<330?"tidur":"bengong";
   }
   // emas: pakai jam New York
   const p=nyParts(new Date()), nm=p.h*60+p.mi;
@@ -589,7 +633,7 @@ function updateStates(){
     const st=stateOf(k);
     $("bot_"+k).setAttribute("class",ANIM[st]);
     $("zzz_"+k).style.display = st==="tidur"?"":"none";
-    const tg=$("tag_"+k); tg.querySelector("span").textContent=`${BOTS[k].emoji} ${BOTS[k].nama}, ${TAGS[st].toLowerCase()}`;
+    const tg=$("tag_"+k); tg.querySelector("span").textContent=`${BOTS[k].emoji} ${BOTS[k].nama}`; tg.title=TAGS[st];
     tg.querySelector("i").style.background=DOT[st]||"var(--blue)";
   });
 }

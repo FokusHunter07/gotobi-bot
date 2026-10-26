@@ -1,11 +1,13 @@
 """
 Kantor GotobiAgus - Bot Simulasi Trading (paper trading) -> laporan ke Telegram
 ==============================================================================
-Empat "karyawan", masing-masing punya akun virtual sendiri:
+Enam "karyawan", masing-masing punya akun virtual sendiri:
 
   ⚡ Goto  (USD/JPY)  SELL tgl 5/10/15/20/25/30 jam 07:55 WIB, SL 10 pip, close 08:20 WIB
   ⏰ Asli  (USD/JPY)  sama seperti Goto tetapi close 08:30 WIB (versi gotobi lama)
   🌙 Kamis (USD/JPY)  BUY setiap Kamis 02:15 WIB, SL 10 pip, close 02:50 WIB
+  🎉 Jumat (USD/JPY)  BUY setiap Jumat 22:40 WIB, SL 15 pip, TP 15 pip, close Sabtu 02:40 WIB
+  ☕ Senin (USD/JPY)  BUY setiap Senin 14:50 WIB, SL 20 pip, TP 20 pip, close 22:50 WIB
   🥇 Emas  (XAU/USD)  "Emas Malam": BUY jam 16:30 New York (03:30/04:30 WIB) Senin-Kamis NY,
                       SL 0,5 x ATR(14) harian, TP 1R, close jam 03:00 New York (14:00/15:00 WIB)
 
@@ -45,6 +47,8 @@ HARI = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 START_BALANCE = 100.0          # modal awal virtual tiap bot
 RISK_PCT = 1.0                 # % saldo yang dirisikokan per trade
 SIM_START = dt.date(2026, 10, 20)   # tanggal mulai akun virtual
+# Bot baru mulai dicatat setelah dibuat, supaya tidak ada trade dari data yang dipakai saat backtest
+BOT_START = {"jumat": dt.date(2026, 10, 26), "senin": dt.date(2026, 10, 26)}
 DEPOSIT_USD = 50.0             # setoran rutin virtual
 DEPOSIT_EVERY_MONTHS = 2       # tiap N bulan sejak SIM_START (20 Des, 20 Feb, ...)
 LOOKBACK_DAYS = 10             # trade yang terlewat dalam N hari terakhir akan disusulkan
@@ -58,11 +62,15 @@ BOTS = {
               "aturan": "SELL tgl gotobi 07:55 WIB · SL 10 pip · close 08:30 WIB"},
     "kamis": {"nama": "Kamis", "emoji": "🌙", "pasar": "USD/JPY", "file": "trades_kamis.csv",
               "aturan": "BUY tiap Kamis 02:15 WIB · SL 10 pip · close 02:50 WIB"},
+    "jumat": {"nama": "Jumat", "emoji": "🎉", "pasar": "USD/JPY", "file": "trades_jumat.csv",
+              "aturan": "BUY tiap Jumat 22:40 WIB · SL 15 pip · TP 15 pip · close Sabtu 02:40 WIB"},
+    "senin": {"nama": "Senin", "emoji": "☕", "pasar": "USD/JPY", "file": "trades_senin.csv",
+              "aturan": "BUY tiap Senin 14:50 WIB · SL 20 pip · TP 20 pip · close 22:50 WIB"},
     "emas":  {"nama": "Emas",  "emoji": "🥇", "pasar": "XAU/USD", "file": "trades_emas.csv",
               "aturan": "BUY 16:30 New York (03:30/04:30 WIB) Sen–Kam NY · SL 0,5×ATR · TP 1R · "
                         "close 03:00 New York (14:00/15:00 WIB)"},
 }
-ORDER = ["goto", "asli", "kamis", "emas"]
+ORDER = ["goto", "asli", "kamis", "jumat", "senin", "emas"]
 
 FIELDS = ["tanggal", "hari", "arah", "entry", "stop_loss", "take_profit", "exit", "jam_entry_wib",
           "jam_keluar_wib", "hasil", "pips", "R", "risiko_usd", "pl_usd", "saldo", "lot", "sumber",
@@ -419,6 +427,31 @@ class KamisBot(Bot):
         return res, src, 0.10
 
 
+class WeeklyBot(Bot):
+    """Bot mingguan USD/JPY dengan TP = SL (R:R 1:1) dan tutup waktu. Semua jam dalam UTC."""
+    symbol = "USDJPY"
+    unit = "pip"
+
+    def __init__(self, key, weekday_utc, entry_hm, exit_hm, side, sl_pips, tp_pips):
+        self.key, self.wd, self.entry_hm, self.exit_hm = key, weekday_utc, entry_hm, exit_hm
+        self.side, self.sl, self.tp = side, sl_pips * 0.01, tp_pips * 0.01
+
+    def candidates(self, now_utc):
+        out = []
+        today = now_utc.date()
+        for back in range(LOOKBACK_DAYS, -1, -1):
+            d = today - dt.timedelta(days=back)
+            if d.weekday() == self.wd:
+                entry = utc_at(d, *self.entry_hm)
+                out.append((entry.astimezone(WIB).date(), entry, utc_at(d, *self.exit_hm)))
+        return out
+
+    def run(self, d, entry_utc, exit_utc):
+        bars, src = get_bars("USDJPY", entry_utc.replace(minute=0), exit_utc, allow_yahoo=True)
+        res = sim_time_exit(bars, self.side, entry_utc, exit_utc, self.sl, self.tp)
+        return res, src, self.sl
+
+
 class EmasBot(Bot):
     key = "emas"
     symbol = "XAUUSD"
@@ -456,6 +489,9 @@ class EmasBot(Bot):
 
 
 ENGINES = {"goto": GotobiBot("goto", (1, 20)), "asli": GotobiBot("asli", (1, 30)),
+           # Jumat: Jumat 15:40-19:40 UTC (22:40-02:40 WIB); Senin: Senin 07:50-15:50 UTC (14:50-22:50 WIB)
+           "jumat": WeeklyBot("jumat", 4, (15, 40), (19, 40), 1, 15, 15),
+           "senin": WeeklyBot("senin", 0, (7, 50), (15, 50), 1, 20, 20),
            "kamis": KamisBot(), "emas": EmasBot()}
 
 
@@ -555,7 +591,7 @@ def cmd_report():
         done = {t["tanggal"] for t in trades}
         new = []
         for d, entry, exit_ in eng.candidates(now):
-            if d < SIM_START or d.isoformat() in done:
+            if d < BOT_START.get(key, SIM_START) or d.isoformat() in done:
                 continue
             if now < exit_ + dt.timedelta(minutes=5):
                 continue                                   # trade belum selesai
@@ -629,14 +665,17 @@ def cmd_report():
 
 # ====================== AKUN TIM (satu dompet untuk semua bot) ======================
 TEAM_MIN_RISK = 1.0      # risiko minimal per trade ($) saat saldo di bawah $100
-TEAM_BOTS = ["goto", "asli", "kamis"]   # Emas tidak ikut: lot 0,01 emas (~$33 risiko) terlalu besar untuk modal kecil
+TEAM_BOTS = ["goto", "asli", "kamis", "jumat", "senin"]   # Emas tidak ikut: lot 0,01 emas terlalu besar
+SL_PIPS = {"goto": 10, "asli": 10, "kamis": 10, "jumat": 15, "senin": 20}
 
 
-def lot_risk(price):
-    """Risiko $ untuk 0,01 lot USD/JPY dengan SL 10 pip."""
-    return 100.0 / price
-DEF_IN = {"goto": "07:55", "asli": "07:55", "kamis": "02:15", "emas": "03:30"}
-DEF_OUT = {"goto": "08:20", "asli": "08:30", "kamis": "02:50", "emas": "14:00"}
+def lot_risk(price, sl_pips=10):
+    """Risiko $ untuk 0,01 lot USD/JPY dengan SL sl_pips pip (1 pip 0,01 lot = 10 JPY)."""
+    return sl_pips * 10.0 / price
+
+
+DEF_IN = {"goto": "07:55", "asli": "07:55", "kamis": "02:15", "jumat": "22:40", "senin": "14:50", "emas": "03:30"}
+DEF_OUT = {"goto": "08:20", "asli": "08:30", "kamis": "02:50", "jumat": "02:40", "senin": "22:50", "emas": "14:00"}
 
 
 def team():
@@ -648,9 +687,11 @@ def team():
     ev = []
     for k in TEAM_BOTS:
         for t in load_trades(k):
-            ev.append((ts(t["tanggal"], t.get("jam_entry_wib") or DEF_IN[k]), ORDER.index(k), k,
-                       float(t["R"]), ts(t["tanggal"], t.get("jam_keluar_wib") or DEF_OUT[k]),
-                       float(t["entry"]), float(t["pips"])))
+            ent = ts(t["tanggal"], t.get("jam_entry_wib") or DEF_IN[k])
+            ex = ts(t["tanggal"], t.get("jam_keluar_wib") or DEF_OUT[k])
+            if ex < ent:                                   # contoh Jumat: tutup Sabtu dini hari
+                ex += dt.timedelta(days=1)
+            ev.append((ent, ORDER.index(k), k, float(t["R"]), ex, float(t["entry"]), float(t["pips"])))
     ev.sort()
     deps = []
     k = 1
@@ -659,7 +700,7 @@ def team():
         deps.append(dt.datetime.combine(add_months(SIM_START, DEPOSIT_EVERY_MONTHS * k), dt.time(12)))
         k += 1
     bal, dep, opened, per, wins = START_BALANCE, START_BALANCE, [], {x: 0.0 for x in TEAM_BOTS}, 0
-    last_px = 155.0
+    last_px, last_sl = 155.0, 10
     di = 0
     for ent, _, key, R, ex, price, pips in ev:
         for o in sorted(o for o in opened if o[0] <= ent):
@@ -668,7 +709,7 @@ def team():
         while di < len(deps) and deps[di] <= ent:
             bal += DEPOSIT_USD; dep += DEPOSIT_USD; di += 1
         risk = max(TEAM_MIN_RISK, bal * RISK_PCT / 100)
-        n = max(1, int(risk / lot_risk(price) + 1e-9))      # jumlah 0,01 lot
+        n = max(1, int(risk / lot_risk(price, SL_PIPS[key]) + 1e-9))   # jumlah 0,01 lot
         pl = round(n * pips * 10 / price, 2)
         last_px = price
         opened.append((ex, pl))
@@ -677,7 +718,7 @@ def team():
     bal += sum(o[1] for o in opened)
     while di < len(deps):
         bal += DEPOSIT_USD; dep += DEPOSIT_USD; di += 1
-    n_next = max(1, int(max(TEAM_MIN_RISK, bal * RISK_PCT / 100) / lot_risk(last_px) + 1e-9))
+    n_next = max(1, int(max(TEAM_MIN_RISK, bal * RISK_PCT / 100) / lot_risk(last_px, last_sl) + 1e-9))
     return dict(bal=bal, dep=dep, profit=bal - dep, n=len(ev), wr=wins / len(ev) * 100 if ev else 0,
                 per=per, lot=n_next / 100, risk=n_next * lot_risk(last_px))
 
@@ -685,10 +726,10 @@ def team():
 def team_text():
     t = team()
     parts = " · ".join(f"{BOTS[k]['emoji']} {t['per'][k]:+.2f}" for k in TEAM_BOTS)
-    return (f"🤝 <b>Akun Tim</b> (3 bot USD/JPY, 1 dompet)\n"
+    return (f"🤝 <b>Akun Tim</b> ({len(TEAM_BOTS)} bot USD/JPY, 1 dompet)\n"
             f"Saldo ${t['bal']:.2f} | disetor ${t['dep']:.0f} | profit ${t['profit']:+.2f} "
             f"({t['profit'] / t['dep'] * 100:+.1f}%)\n"
-            f"{t['n']} trade · menang {t['wr']:.0f}% · lot berikutnya {t['lot']:.2f} (risiko ${t['risk']:.2f})\n"
+            f"{t['n']} trade · menang {t['wr']:.0f}% · lot berikutnya {t['lot']:.2f} (risiko ±${t['risk']:.2f} untuk SL 10 pip)\n"
             f"Kontribusi: {parts}")
 
 
@@ -698,7 +739,7 @@ def klasemen_text():
         s = stats(load_trades(key))
         rows.append((key, s))
     rows.sort(key=lambda x: -(x[1]["ret"] if x[1] else -1e9))
-    medal = ["🥇", "🥈", "🥉", "4️⃣"]
+    medal = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣"]
     lines = ["🏆 <b>Klasemen Kantor GotobiAgus</b>"]
     for i, (key, s) in enumerate(rows):
         c = BOTS[key]
@@ -746,7 +787,7 @@ def cmd_menu():
 
 
 def cmd_test():
-    send_telegram("✅ Kantor GotobiAgus aktif: ⚡ Goto, ⏰ Asli, 🌙 Kamis, 🥇 Emas siap bekerja.\n\n" + klasemen_text())
+    send_telegram("✅ Kantor GotobiAgus aktif: ⚡ Goto, ⏰ Asli, 🌙 Kamis, 🎉 Jumat, ☕ Senin, 🥇 Emas siap bekerja.\n\n" + klasemen_text())
 
 
 if __name__ == "__main__":
