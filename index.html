@@ -3,323 +3,562 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Kantor Gotobi</title>
+<title>Kantor GotobiAgus</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
+/* ===== Warna: "senja di kantor" — lembut, kontras cukup, tidak menyilaukan ===== */
 :root{
-  --bg:#13112a; --panel:#1d1a44; --panel2:#262257; --line:#3a3580;
-  --text:#ecebff; --muted:#9d99d6; --green:#3ee6a0; --red:#ff6b81; --amber:#ffc65c; --blue:#6aa8ff;
-  --wallL:#cfc9f2; --wallR:#bdb5ec; --floor:#a79fe0; --floorLine:#958dd6;
+  --bg:#181b28; --panel:#212538; --panel2:#272c42; --line:#343a55; --soft:#2b3048;
+  --text:#e9e7f3; --muted:#9a9db8; --faint:#6f7393;
+  --green:#8fd1b0; --red:#ec9a9a; --amber:#e9c483; --blue:#9db2f2; --accent:#b3a6ee;
+  --wallL:#d6d8e7; --wallR:#c6cadc; --floor:#abb1c9; --floorLine:#9ea5bf;
+  --bubble:#2a2f47; --tagbg:rgba(33,37,56,.92);
+  --room-light:1;
+  --ease:cubic-bezier(.22,.8,.24,1);
+}
+:root[data-theme="light"]{
+  --bg:#f2f1f7; --panel:#ffffff; --panel2:#fbfaff; --line:#e3e1ee; --soft:#f0eef8;
+  --text:#272538; --muted:#6c6984; --faint:#9a97b0;
+  --green:#2f9a6c; --red:#cf5f5f; --amber:#b5862a; --blue:#4f6bd0; --accent:#6c5bd4;
+  --wallL:#e4e6f2; --wallR:#d6d9e8; --floor:#c2c7dc; --floorLine:#b3b9d0;
+  --bubble:#ffffff; --tagbg:rgba(255,255,255,.94);
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f2f1f7; --panel:#ffffff; --panel2:#fbfaff; --line:#e3e1ee; --soft:#f0eef8;
+    --text:#272538; --muted:#6c6984; --faint:#9a97b0;
+    --green:#2f9a6c; --red:#cf5f5f; --amber:#b5862a; --blue:#4f6bd0; --accent:#6c5bd4;
+    --wallL:#e4e6f2; --wallR:#d6d9e8; --floor:#c2c7dc; --floorLine:#b3b9d0;
+    --bubble:#ffffff; --tagbg:rgba(255,255,255,.94);
+  }
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--bg);color:var(--text);font-family:"Plus Jakarta Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-body{max-width:520px;margin:0 auto;min-height:100vh;padding-bottom:24px}
-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px}
-header h1{font-size:18px;font-weight:800;letter-spacing:.2px}
-header small{display:block;color:var(--muted);font-size:11px;font-weight:500;margin-top:2px}
-.live{font-size:11px;font-weight:700;color:var(--green);border:1px solid #2d5f50;background:#13302a;padding:4px 10px;border-radius:99px;display:flex;gap:6px;align-items:center}
-.live i{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.6s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--text);font-family:"Nunito",system-ui,sans-serif;font-weight:600;-webkit-font-smoothing:antialiased;
+  max-width:520px;margin:0 auto;min-height:100vh;padding-bottom:28px;transition:background .6s var(--ease),color .6s var(--ease)}
+button{font:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:12px}
 
-.board{margin:0 12px;background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:16px;padding:12px 14px}
-.board .top{display:flex;justify-content:space-between;font-size:10.5px;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:10px}
-.board .top b{color:var(--green);font-weight:700;letter-spacing:.3px}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px 8px}
-.stat span{display:block;font-size:10.5px;color:var(--muted);margin-bottom:3px}
-.stat strong{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums}
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 10px}
+header h1{font-size:20px;font-weight:800;letter-spacing:-.2px}
+header small{display:block;color:var(--muted);font-size:12px;font-weight:600;margin-top:2px}
+.live{font-size:12px;font-weight:800;color:var(--green);background:var(--panel);border:1px solid var(--line);padding:5px 11px;border-radius:99px;display:flex;gap:7px;align-items:center;font-variant-numeric:tabular-nums}
+.live i{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* tab dengan indikator yang meluncur */
+.tabs{position:relative;display:flex;gap:2px;margin:2px 14px 12px;padding:4px;background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs .ind{position:absolute;top:4px;left:0;height:calc(100% - 8px);border-radius:12px;background:var(--soft);box-shadow:inset 0 0 0 1px var(--line);transition:transform .38s var(--ease),width .38s var(--ease);z-index:0}
+.tabs button{position:relative;z-index:1;flex:1 0 auto;font-size:13px;font-weight:700;color:var(--muted);background:none;border:0;border-radius:12px;padding:8px 11px;cursor:pointer;transition:color .3s var(--ease);white-space:nowrap}
+.tabs button.on{color:var(--text)}
+
+.board{margin:0 14px;background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:16px 16px 14px;min-height:168px;transition:opacity .22s var(--ease),transform .22s var(--ease)}
+.board.out{opacity:0;transform:translateY(6px)}
+.board .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
+.board .top span{font-size:15px;font-weight:800}
+.board .top b{font-size:12px;color:var(--muted);font-weight:700;white-space:nowrap}
+.rule{font-size:12px;color:var(--muted);margin:0 0 14px;line-height:1.5}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 10px}
+.stat span{display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px}
+.stat strong{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
 .pos{color:var(--green)} .neg{color:var(--red)}
+.rank{list-style:none;margin-top:4px}
+.rank li{display:grid;grid-template-columns:30px 1fr auto;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.rank li:first-child{border-top:0}
+.rank .m{font-size:19px;text-align:center}
+.rank .n{font-weight:800;font-size:15px}
+.rank .n small{display:block;font-weight:600;font-size:11.5px;color:var(--muted);margin-top:2px}
+.rank .v{text-align:right;font-weight:800;font-variant-numeric:tabular-nums;font-size:16px}
+.rank .v small{display:block;font-size:11.5px;color:var(--muted);font-weight:600}
 
-.room{position:relative;margin:12px 0 0}
-.room svg{display:block;width:100%;height:auto}
-.bubble{position:absolute;transform:translate(-50%,-100%);background:#221f4d;color:#fff;border:1px solid #4a44a0;border-radius:12px;padding:7px 10px;font-size:11.5px;line-height:1.35;max-width:62%;box-shadow:0 6px 18px rgba(0,0,0,.35);transition:opacity .35s, transform .35s;pointer-events:none}
-.bubble b{display:block;font-size:9.5px;letter-spacing:1px;color:var(--amber);margin-bottom:2px}
-.bubble:after{content:"";position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);border:7px solid transparent;border-bottom:0;border-top-color:#221f4d}
-.bubble.hide{opacity:0;transform:translate(-50%,-90%)}
-.tag{position:absolute;transform:translate(-50%,-50%);font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:99px;background:#1b2a5a;color:#cfe0ff;border:1px solid #3d5db0;white-space:nowrap}
-.tag i{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;background:var(--blue);vertical-align:1px}
+.room{position:relative;margin:14px 0 2px}
+.room svg{display:block;width:100%;height:auto;filter:brightness(var(--room-light)) saturate(calc(.75 + var(--room-light)*.25));transition:filter 3s ease}
+.bubble{position:absolute;transform:translate(-50%,-100%) scale(1);transform-origin:50% 100%;background:var(--bubble);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:9px 12px;font-size:12.5px;line-height:1.45;max-width:62%;min-width:140px;box-shadow:0 10px 30px rgba(10,12,30,.25);transition:opacity .45s var(--ease),transform .45s var(--ease),left .6s var(--ease),top .6s var(--ease);pointer-events:none;z-index:3}
+.bubble b{display:block;font-size:11.5px;margin-bottom:2px;font-weight:800}
+.bubble:after{content:"";position:absolute;left:50%;bottom:-7px;transform:translateX(-50%) rotate(45deg);width:12px;height:12px;background:var(--bubble);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.bubble.hide{opacity:0;transform:translate(-50%,-92%) scale(.96)}
+.tag{position:absolute;transform:translate(-50%,-50%);font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--tagbg);color:var(--text);border:1px solid var(--line);white-space:nowrap;z-index:2;backdrop-filter:blur(4px);transition:opacity .4s var(--ease)}
+.tag i{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;background:var(--blue);vertical-align:1px;transition:background .6s var(--ease)}
+.room.focus .tag{opacity:.35}
+.room.focus .tag.me{opacity:1}
 
-.card{margin:12px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px 14px}
-.card h2{font-size:12px;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:10px;display:flex;justify-content:space-between}
-.next{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.next .when{font-size:15px;font-weight:700}
-.next .rule{font-size:11.5px;color:var(--muted);margin-top:3px}
-.count{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--amber);text-align:right}
-.count small{display:block;font-size:10px;color:var(--muted);font-weight:600}
-.feed{list-style:none;max-height:300px;overflow:auto}
-.feed li{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-top:1px solid #2c2866;font-size:12.5px}
+.card{margin:14px;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:14px 16px}
+.card h2{font-size:15px;font-weight:800;margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline}
+.card h2 small{font-size:12px;color:var(--muted);font-weight:700}
+.sched,.feed{list-style:none}
+.sched li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.sched li:first-child{border-top:0}
+.sched .w{font-size:14px;font-weight:800}
+.sched .w small{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-top:2px}
+.sched .c{font-size:14px;font-weight:800;color:var(--amber);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.dep{font-size:12.5px;color:var(--muted);margin-top:8px;padding-top:10px;border-top:1px dashed var(--line)}
+.dep b{color:var(--amber)}
+.feed{max-height:360px;overflow:auto;scroll-behavior:smooth;-webkit-overflow-scrolling:touch}
+.feed li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line);font-size:13.5px}
 .feed li:first-child{border-top:0}
-.feed .d{color:var(--muted);font-size:11px;margin-top:2px}
-.feed .r{font-weight:800;font-variant-numeric:tabular-nums;text-align:right}
-.empty{color:var(--muted);font-size:12.5px;padding:6px 0}
-.foot{color:#6f6aa8;font-size:10.5px;text-align:center;padding:4px 16px}
+.feed .d{color:var(--muted);font-size:12px;margin-top:2px;font-weight:600}
+.feed .r{font-weight:800;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.empty{color:var(--muted);font-size:13px;padding:6px 0;line-height:1.5}
+.foot{color:var(--faint);font-size:11.5px;text-align:center;padding:4px 20px;line-height:1.5}
 
-/* animations */
-.bob{animation:bob 2.4s ease-in-out infinite}
-@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
-.type .armL{animation:typeL .28s infinite alternate}.type .armR{animation:typeR .28s .14s infinite alternate}
+/* animasi karakter: pelan & lembut */
+.bob{animation:bob 3.2s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+.type .armL{animation:typeL .34s ease-in-out infinite alternate}.type .armR{animation:typeR .34s .17s ease-in-out infinite alternate}
 @keyframes typeL{to{transform:translateY(-2px)}}@keyframes typeR{to{transform:translateY(-2px)}}
-.sleep .head{transform:rotate(14deg);transform-box:fill-box;transform-origin:center bottom}
-.party{animation:jump .6s ease-in-out infinite}
-@keyframes jump{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+.sleep .head{transform:rotate(12deg);transform-box:fill-box;transform-origin:center bottom;transition:transform 1s var(--ease)}
+.party{animation:jump .9s var(--ease) infinite}
+@keyframes jump{0%,100%{transform:translateY(0)}45%{transform:translateY(-8px)}}
 .sad .head{transform:translateY(2px)}
-.blink{animation:blink 4s infinite}
-@keyframes blink{0%,92%,100%{opacity:1}95%{opacity:.1}}
-.led{animation:led 1.1s steps(2) infinite}
-@keyframes led{50%{opacity:.2}}
-.steam path{animation:steam 2.8s ease-in-out infinite;opacity:0}
-.steam path:nth-child(2){animation-delay:1.3s}
-@keyframes steam{0%{opacity:0;transform:translateY(4px)}40%{opacity:.7}100%{opacity:0;transform:translateY(-10px)}}
-.zzz text{animation:zz 3s infinite;opacity:0;font-weight:800}
-.zzz text:nth-child(2){animation-delay:1s}.zzz text:nth-child(3){animation-delay:2s}
+.blink{animation:blink 5s infinite}
+@keyframes blink{0%,94%,100%{opacity:1}97%{opacity:.15}}
+.led{animation:led 2.2s ease-in-out infinite}
+@keyframes led{50%{opacity:.25}}
+.steam path{animation:steam 3.6s ease-in-out infinite;opacity:0}
+.steam path:nth-child(2){animation-delay:1.8s}
+@keyframes steam{0%{opacity:0;transform:translateY(4px)}40%{opacity:.6}100%{opacity:0;transform:translateY(-10px)}}
+.zzz text{animation:zz 3.6s ease-in-out infinite;opacity:0;font-weight:800}
+.zzz text:nth-child(2){animation-delay:1.2s}.zzz text:nth-child(3){animation-delay:2.4s}
 @keyframes zz{0%{opacity:0;transform:translate(0,0)}30%{opacity:1}100%{opacity:0;transform:translate(10px,-22px)}}
-.chartline{stroke-dasharray:140;animation:draw 3.5s linear infinite}
+.chartline{stroke-dasharray:140;animation:draw 6s linear infinite}
 @keyframes draw{from{stroke-dashoffset:140}to{stroke-dashoffset:0}}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}
+}
 </style>
 </head>
 <body>
 <header>
-  <div><h1>Kantor Gotobi</h1><small id="updated">Memuat data…</small></div>
+  <div><h1>Kantor GotobiAgus</h1><small id="updated">Memuat data…</small></div>
   <div class="live"><i></i><span id="clock">--:--:--</span></div>
 </header>
 
-<section class="board">
-  <div class="top"><span>PAPAN KINERJA · AKUN VIRTUAL</span><b id="mode">USD/JPY</b></div>
-  <div class="stats">
-    <div class="stat"><span>PnL total</span><strong id="pnl">$0.00</strong></div>
-    <div class="stat"><span>Saldo</span><strong id="bal">$100.00</strong></div>
-    <div class="stat"><span>Win rate</span><strong id="wr">–</strong></div>
-    <div class="stat"><span>Trade</span><strong id="n">0</strong></div>
-    <div class="stat"><span>Total R</span><strong id="tr">0.00R</strong></div>
-    <div class="stat"><span>Max DD</span><strong id="dd">0.0%</strong></div>
-  </div>
-</section>
+<nav class="tabs" id="tabs"></nav>
+<section class="board" id="board"></section>
 
 <section class="room" id="room">
-  <svg id="scene" viewBox="0 0 400 330" aria-label="Kantor animasi bot Gotobi"></svg>
+  <svg id="scene" viewBox="0 0 400 330" aria-label="Kantor animasi empat bot"></svg>
   <div class="bubble hide" id="bubble"><b id="who">GOTO</b><span id="say">…</span></div>
-  <div class="tag" id="tag"><i></i><span id="tagtxt">Standby</span></div>
+  <div id="tags"></div>
 </section>
 
 <section class="card">
-  <h2><span>JADWAL BERIKUTNYA</span></h2>
-  <div class="next">
-    <div><div class="when" id="nextWhen">–</div><div class="rule">SELL 07:55 WIB · SL 10 pip · close 08:20 WIB</div></div>
-    <div class="count" id="count">–<small>menuju entry</small></div>
-  </div>
+  <h2>Jadwal berikutnya</h2>
+  <ul class="sched" id="sched"></ul>
+  <div class="dep" id="nextDep">Setoran virtual berikutnya: –</div>
 </section>
 
 <section class="card">
-  <h2><span>AKTIVITAS</span><span id="lastR"></span></h2>
-  <ul class="feed" id="feed"><li class="empty">Belum ada trade tercatat. Goto sabar menunggu tanggal gotobi 😴</li></ul>
+  <h2>Aktivitas <small id="feedTitle">Semua bot</small></h2>
+  <ul class="feed" id="feed"><li class="empty">Memuat…</li></ul>
 </section>
-<p class="foot">Simulasi tanpa uang sungguhan · Data dari catatan bot (trades.csv)</p>
+<p class="foot">Simulasi tanpa uang sungguhan. Tiap bot punya akun virtual $100, ditambah setoran $50 tiap 2 bulan, risiko 1% per trade.</p>
 
 <script>
-/* ===================== DATA ===================== */
-const START = 100, GOTOBI = [5,10,15,20,25,30];
+/* ===================== KONFIGURASI ===================== */
+const START = 100, DEPOSIT = 50, DEP_EVERY = 2, SIM_START = [2026,9,20];   // bulan 0-based
+const GOTOBI = [5,10,15,20,25,30];
 const HARI = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
 const BULAN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
-let TRADES = [];
+const BOTS = {
+  goto:  {nama:"Goto",  emoji:"⚡", pasar:"USD/JPY", file:"trades.csv",       unit:"pip", color:"var(--amber)",
+          head:"#f6cf7e", cap:"#eab35a", body:"#8478d6", arm:"#7468c6", desk:"#8478d6",
+          aturan:"SELL tanggal gotobi 07:55 WIB · SL 10 pip · close 08:20 WIB"},
+  asli:  {nama:"Asli",  emoji:"⏰", pasar:"USD/JPY", file:"trades_asli.csv",  unit:"pip", color:"#7fd3ff",
+          head:"#d5dae6", cap:"#a5afc4", body:"#5f93c4", arm:"#5285b5", desk:"#5f93c4",
+          aturan:"SELL tanggal gotobi 07:55 WIB · SL 10 pip · close 08:30 WIB (versi lama)"},
+  kamis: {nama:"Kamis", emoji:"🌙", pasar:"USD/JPY", file:"trades_kamis.csv", unit:"pip", color:"#a9b8ff",
+          head:"#a3b3ef", cap:"#8597df", body:"#3f4a8c", arm:"#37417c", desk:"#5966ad",
+          aturan:"BUY tiap Kamis 02:15 WIB · SL 10 pip · close 02:50 WIB"},
+  emas:  {nama:"Emas",  emoji:"🥇", pasar:"XAU/USD", file:"trades_emas.csv",  unit:"$",   color:"#ffd56b",
+          head:"#f3dc9b", cap:"#e2bd5c", body:"#c9a24a", arm:"#b8933e", desk:"#c9a24a",
+          aturan:"BUY 16:30 New York (03:30/04:30 WIB) Sen–Kam NY · SL 0,5×ATR · TP 1R · close 03:00 NY (14:00/15:00 WIB)"},
+};
+const ORDER = ["goto","asli","kamis","emas"];
+let TR = {goto:[],asli:[],kamis:[],emas:[]};
+let TAB = "all";
+try{ TAB = localStorage.getItem("kantorTab") || "all"; }catch(e){}
 
-const wib = () => new Date(Date.now() + 7*3600e3);          // gunakan getUTC* = jam WIB
-const ymd = d => d.toISOString().slice(0,10);
-const isGotobi = d => GOTOBI.includes(d.getUTCDate()) && d.getUTCDay()>0 && d.getUTCDay()<6;
+/* ===================== WAKTU ===================== */
+const wib = () => new Date(Date.now() + 7*3600e3);          // getUTC* = jam WIB
+const pad = n => String(n).padStart(2,"0");
+const fmtTime = d => [d.getUTCHours(),d.getUTCMinutes(),d.getUTCSeconds()].map(pad).join(":");
+const NYF = new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour12:false,year:"numeric",month:"numeric",day:"numeric",hour:"numeric",minute:"numeric",weekday:"short"});
+function nyParts(date){
+  const p={}; NYF.formatToParts(date).forEach(x=>p[x.type]=x.value);
+  const dow=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].indexOf(p.weekday);
+  return {y:+p.year,m:+p.month,d:+p.day,h:(+p.hour)%24,mi:+p.minute,dow};
+}
+function nyToDate(y,m,d,h,mi){        // jam New York -> Date (UTC)
+  let guess = Date.UTC(y,m-1,d,h+4,mi);
+  for(let i=0;i<2;i++){ const p=nyParts(new Date(guess)); const diff=(Date.UTC(p.y,p.m-1,p.d,p.h,p.mi)-Date.UTC(y,m-1,d,h,mi)); guess-=diff; }
+  return new Date(guess);
+}
+const toWib = d => new Date(d.getTime()+7*3600e3);
 
+/* ===================== DATA ===================== */
 function parseCSV(t){
   const L=t.trim().split(/\r?\n/); if(L.length<2) return [];
-  const h=L[0].split(","); return L.slice(1).map(l=>{const v=l.split(",");const o={};h.forEach((k,i)=>o[k]=v[i]);return o});
+  const h=L[0].split(","); return L.slice(1).filter(Boolean).map(l=>{const v=l.split(",");const o={};h.forEach((k,i)=>o[k]=v[i]||"");return o});
 }
-async function loadTrades(){
-  try{
-    const r = await fetch("trades.csv?t="+Date.now(),{cache:"no-store"});
-    if(!r.ok) throw 0;
-    TRADES = parseCSV(await r.text()).sort((a,b)=>a.tanggal<b.tanggal?-1:1);
-    document.getElementById("updated").textContent = "Diperbarui "+fmtTime(wib());
-  }catch(e){ TRADES=[]; document.getElementById("updated").textContent="Belum ada catatan trade"; }
-  renderStats(); renderFeed();
+async function loadAll(){
+  let ok=0;
+  await Promise.all(ORDER.map(async k=>{
+    try{ const r=await fetch(BOTS[k].file+"?t="+Date.now(),{cache:"no-store"}); if(!r.ok) throw 0;
+         TR[k]=parseCSV(await r.text()).sort((a,b)=>a.tanggal<b.tanggal?-1:1); ok++; }
+    catch(e){ TR[k]=[]; }
+  }));
+  $("updated").textContent = ok ? "Diperbarui "+fmtTime(wib())+" WIB" : "Belum ada catatan trade";
+  render();
+}
+const $ = id => document.getElementById(id);
+const money = v => (v<0?"-$":"$")+Math.abs(v).toFixed(2);
+function stats(arr){
+  const n=arr.length, last=n?arr[n-1]:null, bal=last?+last.saldo:START;
+  const dep=last&&last.modal_disetor?+last.modal_disetor:START;
+  const wins=arr.filter(t=>+t.R>0).length, totR=arr.reduce((s,t)=>s+ +t.R,0);
+  let idx=1,peak=1,dd=0; arr.forEach(t=>{idx*=1+0.01*(+t.R);peak=Math.max(peak,idx);dd=Math.min(dd,(idx-peak)/peak)});
+  return {n,bal,dep,wins,totR,dd,profit:bal-dep,ret:(bal-dep)/dep*100,wr:n?wins/n*100:null};
 }
 
 /* ===================== PANEL ===================== */
-const $ = id => document.getElementById(id);
-const money = v => (v<0?"-$":"$")+Math.abs(v).toFixed(2);
-function fmtTime(d){return [d.getUTCHours(),d.getUTCMinutes(),d.getUTCSeconds()].map(x=>String(x).padStart(2,"0")).join(":")}
-function renderStats(){
-  const n=TRADES.length, bal=n?+TRADES[n-1].saldo:START;
-  const wins=TRADES.filter(t=>+t.R>0).length, totR=TRADES.reduce((s,t)=>s+ +t.R,0);
-  let peak=START,dd=0; TRADES.forEach(t=>{const e=+t.saldo;peak=Math.max(peak,e);dd=Math.min(dd,(e-peak)/peak)});
-  const pnl=bal-START;
-  $("pnl").textContent=money(pnl); $("pnl").className=pnl>=0?"pos":"neg";
-  $("bal").textContent=money(bal);
-  $("wr").textContent=n?(wins/n*100).toFixed(1)+"%":"–";
-  $("n").textContent=n;
-  $("tr").textContent=(totR>=0?"+":"")+totR.toFixed(2)+"R"; $("tr").className=totR>=0?"pos":"neg";
-  $("dd").textContent=(dd*100).toFixed(1)+"%";
+function renderTabs(){
+  const items=[["all","🏆 Klasemen"],...ORDER.map(k=>[k,BOTS[k].emoji+" "+BOTS[k].nama])];
+  if(!$("tabs").children.length){
+    $("tabs").innerHTML=`<span class="ind" id="ind"></span>`+items.map(([k,l])=>`<button data-k="${k}">${l}</button>`).join("");
+    $("tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{ if(b.dataset.k===TAB) return; TAB=b.dataset.k;
+      try{localStorage.setItem("kantorTab",TAB)}catch(e){}; switchTab(); });
+  }
+  $("tabs").querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.k===TAB));
+  moveInd();
+}
+function moveInd(){
+  const on=$("tabs").querySelector("button.on"); if(!on) return;
+  $("ind").style.width=on.offsetWidth+"px"; $("ind").style.transform=`translateX(${on.offsetLeft}px)`;
+  on.scrollIntoView({behavior:"smooth",inline:"nearest",block:"nearest"});
+}
+let swapping=false;
+function switchTab(){
+  renderTabs();
+  const b=$("board"); b.classList.add("out");
+  setTimeout(()=>{ renderBoard(true); renderFeed(); renderSched(); updateStates(); b.classList.remove("out"); think(); },220);
+}
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function countUp(el,to,fmt){
+  if(REDUCED){ el.textContent=fmt(to); return; }
+  const t0=performance.now(), dur=650, from=0;
+  const step=now=>{ const k=Math.min(1,(now-t0)/dur), e=1-Math.pow(1-k,3); el.textContent=fmt(from+(to-from)*e); if(k<1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+function renderBoard(animate){
+  if(TAB==="all"){
+    const rows=ORDER.map(k=>({k,s:stats(TR[k])})).sort((a,b)=>(b.s.n?b.s.ret:-1e9)-(a.s.n?a.s.ret:-1e9));
+    const medal=["🥇","🥈","🥉","4️⃣"];
+    $("board").innerHTML=`<div class="top"><span>Klasemen</span><b>profit dari total setoran</b></div><ul class="rank">`+
+      rows.map((r,i)=>{const b=BOTS[r.k],s=r.s;
+        return `<li><span class="m">${medal[i]}</span><div class="n">${b.emoji} ${b.nama}<small>${b.pasar}, ${s.n} trade, menang ${s.n?s.wr.toFixed(0)+"%":"–"}</small></div>
+        <div class="v ${s.profit>=0?'pos':'neg'}">${s.n?(s.ret>=0?"+":"")+s.ret.toFixed(1)+"%":"–"}<small>saldo ${money(s.bal)}</small></div></li>`}).join("")+`</ul>`;
+    return;
+  }
+  const b=BOTS[TAB], s=stats(TR[TAB]);
+  $("board").innerHTML=`<div class="top"><span>${b.emoji} ${b.nama}</span><b>${b.pasar} · akun virtual</b></div>
+   <div class="rule">${b.aturan}</div>
+   <div class="stats">
+    <div class="stat"><span>Profit bersih</span><strong id="cProfit" class="${s.profit>=0?'pos':'neg'}">${(s.profit>=0?"+":"")+money(s.profit)}</strong></div>
+    <div class="stat"><span>Saldo</span><strong id="cBal">${money(s.bal)}</strong></div>
+    <div class="stat"><span>Modal disetor</span><strong>$${s.dep.toFixed(0)}</strong></div>
+    <div class="stat"><span>Win rate</span><strong>${s.n?s.wr.toFixed(1)+"%":"–"}</strong></div>
+    <div class="stat"><span>Trade · Total R</span><strong class="${s.totR>=0?'pos':'neg'}" style="font-size:15px">${s.n} · ${(s.totR>=0?"+":"")+s.totR.toFixed(2)}R</strong></div>
+    <div class="stat"><span>Max DD</span><strong>${(s.dd*100).toFixed(1)}%</strong></div>
+   </div>`;
+  if(animate){ countUp($("cProfit"),s.profit,v=>(v>=0?"+":"")+money(v)); countUp($("cBal"),s.bal,money); }
 }
 function renderFeed(){
-  if(!TRADES.length) return;
-  const last=TRADES[TRADES.length-1];
-  $("lastR").innerHTML=`<span class="${+last.R>0?'pos':'neg'}">${+last.R>0?'▲':'▼'} ${(+last.R).toFixed(2)}R</span>`;
-  $("feed").innerHTML=TRADES.slice(-15).reverse().map(t=>{
-    const win=+t.R>0, d=new Date(t.tanggal+"T00:00:00Z");
-    return `<li><div>${win?"✅":"❌"} ${t.hari}, ${d.getUTCDate()} ${BULAN[d.getUTCMonth()]} ${d.getUTCFullYear()}
-      <div class="d">SELL ${t.entry} → ${t.exit} · ${t.hasil}</div></div>
-      <div class="r ${win?'pos':'neg'}">${(+t.pips>0?"+":"")+(+t.pips).toFixed(1)} pip<div class="d">${money(+t.pl_usd)}</div></div></li>`}).join("");
-}
-function nextGotobi(){
-  const now=wib(); let d=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate(),7,55));
-  if(now>d) d=new Date(d.getTime()+864e5);
-  for(let i=0;i<40;i++){ if(isGotobi(d)) return d; d=new Date(d.getTime()+864e5); }
-}
-function renderNext(){
-  const nx=nextGotobi(), now=wib(), ms=nx-now;
-  $("nextWhen").textContent=`${HARI[nx.getUTCDay()]}, ${nx.getUTCDate()} ${BULAN[nx.getUTCMonth()]} ${nx.getUTCFullYear()}`;
-  const h=Math.floor(ms/3.6e6), m=Math.floor(ms%3.6e6/6e4), s=Math.floor(ms%6e4/1e3);
-  $("count").innerHTML=(h>=24?`${Math.floor(h/24)} hari ${h%24} jam`:`${h}j ${String(m).padStart(2,"0")}m ${String(s).padStart(2,"0")}d`)+"<small>menuju entry</small>";
+  let all=[];
+  ORDER.forEach(k=>{ if(TAB==="all"||TAB===k) TR[k].forEach(t=>all.push({k,t})); });
+  all.sort((a,b)=>(b.t.tanggal+(b.t.jam_entry_wib||"")).localeCompare(a.t.tanggal+(a.t.jam_entry_wib||"")));
+  $("feedTitle").textContent = TAB==="all" ? "Semua bot" : BOTS[TAB].emoji+" "+BOTS[TAB].nama;
+  if(!all.length){ $("feed").innerHTML=`<li class="empty">Belum ada trade tercatat. Hasil pertama muncul di sini setelah jadwal berikutnya selesai.</li>`; return; }
+  $("feed").innerHTML=all.slice(0,30).map(({k,t})=>{
+    const b=BOTS[k], win=+t.R>0, d=new Date(t.tanggal+"T00:00:00Z");
+    const dep=+t.setoran>0?` <span style="color:var(--amber);font-size:11.5px">+$${(+t.setoran).toFixed(0)} setoran</span>`:"";
+    const mv = b.unit==="pip" ? `${(+t.pips>0?"+":"")+(+t.pips).toFixed(1)} pip` : `${(+t.pips>0?"+":"")+(+t.pips).toFixed(2)} $/oz`;
+    return `<li><div>${win?"✅":"❌"} ${b.emoji} <b>${b.nama}</b> <span style="color:var(--muted)">${HARI[d.getUTCDay()]} ${d.getUTCDate()} ${BULAN[d.getUTCMonth()]}</span>${dep}
+      <div class="d">${t.arah||"SELL"} ${t.entry} ke ${t.exit}, ${t.hasil.toLowerCase()}</div></div>
+      <div class="r ${win?'pos':'neg'}">${mv}<div class="d">${money(+t.pl_usd)} (${(+t.R>0?"+":"")+(+t.R).toFixed(2)}R)</div></div></li>`}).join("");
 }
 
-/* ===================== ISOMETRIC SCENE ===================== */
+/* ===================== JADWAL ===================== */
+function nextGotobi(){        // Date (UTC) of next 07:55 WIB on gotobi weekday
+  const now=Date.now(); let w=wib();
+  let d=Date.UTC(w.getUTCFullYear(),w.getUTCMonth(),w.getUTCDate(),0,55);   // 07:55 WIB = 00:55 UTC
+  for(let i=0;i<40;i++){ const x=new Date(d+7*3600e3); if(d>now && GOTOBI.includes(x.getUTCDate()) && x.getUTCDay()>0 && x.getUTCDay()<6) return new Date(d); d+=864e5; }
+}
+function nextKamis(){         // Kamis 02:15 WIB = Rabu 19:15 UTC
+  const now=Date.now(); const w=wib();
+  let d=Date.UTC(w.getUTCFullYear(),w.getUTCMonth(),w.getUTCDate(),19,15)-864e5;
+  for(let i=0;i<10;i++){ if(d>now && new Date(d).getUTCDay()===3) return new Date(d); d+=864e5; }
+}
+function nextEmas(){          // 16:30 New York, Senin-Kamis
+  const now=new Date(); const p=nyParts(now);
+  for(let i=0;i<8;i++){
+    const base=new Date(Date.UTC(p.y,p.m-1,p.d+i,12));
+    const q={y:base.getUTCFullYear(),m:base.getUTCMonth()+1,d:base.getUTCDate(),dow:base.getUTCDay()};
+    if(q.dow<1||q.dow>4) continue;
+    const t=nyToDate(q.y,q.m,q.d,16,30); if(t>now) return t;
+  }
+}
+function countdown(t){
+  const ms=t-Date.now(); const h=Math.floor(ms/3.6e6), m=Math.floor(ms%3.6e6/6e4), s=Math.floor(ms%6e4/1e3);
+  return h>=24?`${Math.floor(h/24)} hari ${h%24} jam`:`${h}j ${pad(m)}m ${pad(s)}d`;
+}
+const fmtWib = t => { const x=toWib(t); return `${HARI[x.getUTCDay()]} ${x.getUTCDate()} ${BULAN[x.getUTCMonth()]}, ${pad(x.getUTCHours())}:${pad(x.getUTCMinutes())} WIB`; };
+function nextDeposit(){
+  const w=wib(); const today=Date.UTC(w.getUTCFullYear(),w.getUTCMonth(),w.getUTCDate());
+  for(let k=1;k<200;k++){ let y=SIM_START[0], m=SIM_START[1]+DEP_EVERY*k; y+=Math.floor(m/12); m%=12;
+    const last=new Date(Date.UTC(y,m+1,0)).getUTCDate(); const d=Date.UTC(y,m,Math.min(SIM_START[2],last)); if(d>today) return new Date(d); }
+}
+function renderSched(){
+  const g=nextGotobi(), ka=nextKamis(), em=nextEmas();
+  const rows=[["goto",g,"SELL USD/JPY"],["asli",g,"SELL USD/JPY"],["kamis",ka,"BUY USD/JPY"],["emas",em,"BUY XAU/USD"]]
+    .filter(r=>TAB==="all"||TAB===r[0]).sort((a,b)=>a[1]-b[1]);
+  $("sched").innerHTML=rows.map(([k,t,a])=>`<li><div class="w">${BOTS[k].emoji} ${BOTS[k].nama} <span style="color:var(--muted);font-weight:700">${a}</span><small>${fmtWib(t)}</small></div><div class="c">${countdown(t)}</div></li>`).join("");
+  const nd=nextDeposit(); $("nextDep").innerHTML=`Setoran virtual berikutnya <b>$${DEPOSIT} per bot</b> pada ${nd.getUTCDate()} ${BULAN[nd.getUTCMonth()]} ${nd.getUTCFullYear()}`;
+}
+
+/* ===================== ADEGAN ISOMETRIK ===================== */
 const K=17, CX=200, CY=150;
 const P=(x,y,z=0)=>[CX+(x-y)*K, CY+(x+y)*K/2 - z*K];
 const pts=(...a)=>a.map(p=>P(...p).map(v=>v.toFixed(1)).join(",")).join(" ");
 const poly=(p,fill,extra="")=>`<polygon points="${p}" fill="${fill}" ${extra}/>`;
-function box(x,y,z,w,d,h,top,left,right,extra=""){
-  return `<g ${extra}>`+
-   poly(pts([x,y+d,z],[x+w,y+d,z],[x+w,y+d,z+h],[x,y+d,z+h]),left)+
-   poly(pts([x+w,y,z],[x+w,y+d,z],[x+w,y+d,z+h],[x+w,y,z+h]),right)+
-   poly(pts([x,y,z+h],[x+w,y,z+h],[x+w,y+d,z+h],[x,y+d,z+h]),top)+`</g>`;
+function box(x,y,z,w,d,h,top,left,right){
+  return poly(pts([x,y+d,z],[x+w,y+d,z],[x+w,y+d,z+h],[x,y+d,z+h]),left)+
+         poly(pts([x+w,y,z],[x+w,y+d,z],[x+w,y+d,z+h],[x+w,y,z+h]),right)+
+         poly(pts([x,y,z+h],[x+w,y,z+h],[x+w,y+d,z+h],[x,y+d,z+h]),top);
 }
 function plant(x,y){
-  const [sx,sy]=P(x+.4,y+.4,1.1);
-  return box(x,y,0,.8,.8,.9,"#55507f","#3f3a6a","#2f2b55")+
-    `<g class="bob" style="animation-duration:${3+Math.random()*2}s"><circle cx="${sx}" cy="${sy-8}" r="13" fill="#2f9c6a"/><circle cx="${sx-5}" cy="${sy-12}" r="7" fill="#3fbf84"/></g>`;
+  const [sx,sy]=P(x+.35,y+.35,1);
+  return box(x,y,0,.7,.7,.8,"#7a7f9e","#666b8a","#555a78")+
+    `<g class="bob" style="animation-duration:${3+Math.random()*2}s"><circle cx="${sx}" cy="${sy-7}" r="11" fill="#6aae8c"/><circle cx="${sx-4}" cy="${sy-11}" r="6" fill="#86c7a3"/></g>`;
+}
+const DESK={asli:[0.7,0.5],goto:[5.6,0.5],kamis:[0.7,5.5],emas:[5.6,5.5]};
+const ANCH={};
+function desk(k){
+  const b=BOTS[k],[x,y]=DESK[k];
+  let s=box(x,y,0,2.8,1.2,1.5,"#f7f7fb","#e2e3ef","#cfd1e2");
+  s+=poly(pts([x,y+1.2,1.5],[x+2.8,y+1.2,1.5],[x+2.8,y+1.2,1.35],[x,y+1.2,1.35]),b.desk);   // strip warna
+  s+=box(x+.55,y+.2,1.5,1.7,.22,1.35,"#3a3f5c","#2c3150","#343a5a");                       // monitor
+  s+=poly(pts([x+.65,y+.42,1.62],[x+2.15,y+.42,1.62],[x+2.15,y+.42,2.75],[x+.65,y+.42,2.75]),"#1f2440");
+  const line = k==="emas" ? `<polyline class="chartline" fill="none" stroke="#e9c483" stroke-width="1.5" points="${pts([x+.8,y+.42,2.0],[x+1.1,y+.42,2.3],[x+1.4,y+.42,2.15],[x+1.7,y+.42,2.55],[x+2.0,y+.42,2.45])}"/>`
+            : `<polyline class="chartline" fill="none" stroke="${k==='kamis'?'#8fd1b0':'#ec9a9a'}" stroke-width="1.5" points="${k==='kamis'?pts([x+.8,y+.42,2.0],[x+1.1,y+.42,2.2],[x+1.4,y+.42,2.1],[x+1.7,y+.42,2.5],[x+2.0,y+.42,2.6]):pts([x+.8,y+.42,2.5],[x+1.1,y+.42,2.3],[x+1.4,y+.42,2.45],[x+1.7,y+.42,2.05],[x+2.0,y+.42,1.95])}"/>`;
+  s+=line;
+  // mug / aksesori
+  s+=box(x+2.3,y+.6,1.5,.3,.3,.4,"#fff","#e7e3ff","#d3cdf7");
+  const [mx,my]=P(x+2.45,y+.75,1.95);
+  s+=`<g class="steam"><path d="M${mx-2} ${my} q3 -5 0 -9" stroke="#fff" fill="none" stroke-width="1.1"/><path d="M${mx+2} ${my} q3 -5 0 -9" stroke="#fff" fill="none" stroke-width="1.1"/></g>`;
+  // kursi
+  s+=box(x+.75,y+1.8,0,1.3,1.1,.85,"#6b6f9e","#5a5e8c","#4c507b");
+  // karakter (dari belakang)
+  const [cx,cy]=P(x+1.4,y+2.3,.85);
+  const extra = k==="asli" ? `<rect x="-11" y="-44" width="22" height="5" rx="2.5" fill="#8a94ad"/>`
+              : k==="kamis" ? `<path d="M-1 -52 a5 5 0 1 0 6 -5 a4 4 0 1 1 -6 5z" fill="#ffe08a"/>`
+              : k==="emas" ? `<path d="M-9 -44 l3 -7 l3 5 l3 -7 l3 7 l3 -5 l3 7 z" fill="#e6c56a" stroke="#b99447" stroke-width="1"/>`
+              : `<line x1="0" y1="-45" x2="0" y2="-51" stroke="#3a3f5c" stroke-width="2"/><circle class="blink" cx="0" cy="-52" r="3" fill="#ec9a9a"/>`;
+  s+=`<g id="bot_${k}" class="bob"><g transform="translate(${cx},${cy})">
+      <ellipse cx="0" cy="-10" rx="12" ry="13" fill="${b.body}"/>
+      <rect class="armL" x="-15" y="-16" width="6" height="11" rx="3" fill="${b.arm}"/>
+      <rect class="armR" x="9" y="-16" width="6" height="11" rx="3" fill="${b.arm}"/>
+      <g class="head"><circle cx="0" cy="-31" r="11" fill="${b.head}"/>
+        <path d="M-11 -33 a11 11 0 0 1 22 0 z" fill="${b.cap}"/>${extra}</g>
+    </g></g>`;
+  const [zx,zy]=P(x+1.4,y+2.3,4.2);
+  s+=`<g id="zzz_${k}" class="zzz" style="display:none"><text x="${zx+6}" y="${zy}" fill="#fff" font-size="9">z</text><text x="${zx+10}" y="${zy-6}" fill="#fff" font-size="11">z</text><text x="${zx+14}" y="${zy-12}" fill="#fff" font-size="13">Z</text></g>`;
+  ANCH[k]={head:P(x+1.4,y+2.3,4.0), tag:P(x+1.4,y+3.4,0)};
+  return s;
 }
 function scene(){
-  let s=`<defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop id="sky1" offset="0" stop-color="#7cc4ff"/><stop id="sky2" offset="1" stop-color="#cfe8ff"/></linearGradient>
-  </defs>`;
-  // walls
+  let s=`<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop id="sky1" offset="0" stop-color="#7cc4ff"/><stop id="sky2" offset="1" stop-color="#cfe8ff"/></linearGradient></defs>`;
   s+=poly(pts([0,0,0],[0,10,0],[0,10,7],[0,0,7]),"var(--wallL)");
   s+=poly(pts([0,0,0],[10,0,0],[10,0,7],[0,0,7]),"var(--wallR)");
-  // floor + grid
   s+=poly(pts([0,0,0],[10,0,0],[10,10,0],[0,10,0]),"var(--floor)");
   for(let i=1;i<10;i++){ s+=`<line x1="${P(i,0)[0]}" y1="${P(i,0)[1]}" x2="${P(i,10)[0]}" y2="${P(i,10)[1]}" stroke="var(--floorLine)" stroke-width=".7"/>`;
     s+=`<line x1="${P(0,i)[0]}" y1="${P(0,i)[1]}" x2="${P(10,i)[0]}" y2="${P(10,i)[1]}" stroke="var(--floorLine)" stroke-width=".7"/>`; }
-  // window (left wall) with sky
-  s+=poly(pts([0,2,2.6],[0,6.2,2.6],[0,6.2,5.8],[0,2,5.8]),"#8a83c9");
-  s+=poly(pts([0,2.2,2.8],[0,6,2.8],[0,6,5.6],[0,2.2,5.6]),"url(#sky)");
-  s+=`<polyline points="${pts([0,4.1,2.8],[0,4.1,5.6])}" stroke="#8a83c9" stroke-width="3"/>`;
-  s+=`<g id="sun">${(()=>{const [x,y]=P(0,3,4.9);return `<circle cx="${x}" cy="${y}" r="6" fill="#ffd36b"/>`})()}</g>`;
-  // bookshelf (left wall)
-  s+=box(0,7,0,.8,2.6,3.8,"#8a5a3c","#a86d48","#7b4e33");
-  ["#ff6b81","#ffc65c","#6aa8ff","#3ee6a0","#c08bff"].forEach((c,i)=>{for(let r=0;r<3;r++){
-    s+=poly(pts([.8,7.2+i*.45,.4+r*1.15],[.8,7.55+i*.45,.4+r*1.15],[.8,7.55+i*.45,1.2+r*1.15],[.8,7.2+i*.45,1.2+r*1.15]),c);}});
-  // wall frames (right wall): charts + calendar + clock
-  const frame=(x0,z0,w,h,inner)=>poly(pts([x0,0,z0],[x0+w,0,z0],[x0+w,0,z0+h],[x0,0,z0+h]),"#2b2760")+inner;
-  s+=frame(1.2,3.6,2.2,1.6,`<polyline class="chartline" fill="none" stroke="#3ee6a0" stroke-width="1.6" points="${pts([1.4,0,4.0],[1.9,0,4.5],[2.3,0,4.2],[2.8,0,4.9],[3.2,0,4.6])}"/>`);
-  s+=frame(4,4.2,1.5,1.7,`<text id="cal" x="${P(4.75,0,4.9)[0]}" y="${P(4.75,0,4.9)[1]}" font-size="12" font-weight="800" fill="#fff" text-anchor="middle">--</text>
-    <text x="${P(4.75,0,4.5)[0]}" y="${P(4.75,0,4.5)[1]}" font-size="6" fill="#ffc65c" text-anchor="middle">GOTOBI</text>`);
-  const [ckx,cky]=P(7.1,0,5.2);
-  s+=`<g><circle cx="${ckx}" cy="${cky}" r="11" fill="#fff" stroke="#2b2760" stroke-width="2"/>
-      <line id="hh" x1="${ckx}" y1="${cky}" x2="${ckx}" y2="${cky-6}" stroke="#2b2760" stroke-width="2" stroke-linecap="round"/>
-      <line id="mh" x1="${ckx}" y1="${cky}" x2="${ckx}" y2="${cky-9}" stroke="#6a5ad8" stroke-width="1.4" stroke-linecap="round"/></g>`;
-  s+=frame(8.2,3.3,1.3,1.1,`<rect x="${P(8.4,0,4.2)[0]}" y="${P(8.4,0,4.2)[1]-2}" width="10" height="6" fill="#ff6b81"/>`);
-  // plants
-  s+=plant(8.6,.6);
-  // server rack
-  s+=box(8.7,2.6,0,1,1,2.6,"#3a3570","#2c285c","#221f4d");
-  [0,1,2].forEach(i=>{const [x,y]=P(9.7,3.1,.6+i*.7);s+=`<circle class="led" style="animation-delay:${i*.35}s" cx="${x+3}" cy="${y}" r="1.8" fill="${i?'#3ee6a0':'#6aa8ff'}"/>`});
-  // main desk + monitor + mug
-  s+=box(3.6,3.4,0,3.4,1.5,1.6,"#f4f2ff","#dcd8f7","#c8c3ee");
-  s+=box(4.3,3.55,1.6,2,.25,1.5,"#2b2760","#1b1840","#24215a");
-  s+=poly(pts([4.4,3.8,1.75],[6.2,3.8,1.75],[6.2,3.8,3],[4.4,3.8,3]),"#0f1a3a");
-  s+=`<polyline id="screenline" class="chartline" fill="none" stroke="#3ee6a0" stroke-width="1.5" points="${pts([4.55,3.8,2.2],[4.95,3.8,2.6],[5.3,3.8,2.35],[5.7,3.8,2.85],[6.05,3.8,2.5])}"/>`;
-  s+=box(6.4,4.1,1.6,.35,.35,.45,"#fff","#e7e3ff","#d3cdf7");
-  const [mx,my]=P(6.57,4.27,2.1);
-  s+=`<g class="steam"><path d="M${mx-2} ${my} q3 -5 0 -10" stroke="#fff" fill="none" stroke-width="1.2"/><path d="M${mx+2} ${my} q3 -5 0 -10" stroke="#fff" fill="none" stroke-width="1.2"/></g>`;
-  // chair
-  s+=box(4.6,5.5,0,1.4,1.3,.9,"#4b46a0","#3b3685","#302c70");
-  // character (seen from back) — group transformed by state
-  const [cx,cy]=P(5.3,6.0,.9);
-  s+=`<g id="bot" class="bob"><g transform="translate(${cx},${cy})">
-      <ellipse cx="0" cy="-11" rx="13" ry="14" fill="#6a5ad8"/>
-      <rect class="armL" x="-16" y="-17" width="6" height="12" rx="3" fill="#5a4bc7"/>
-      <rect class="armR" x="10" y="-17" width="6" height="12" rx="3" fill="#5a4bc7"/>
-      <g class="head"><circle cx="0" cy="-33" r="12" fill="#ffc65c"/>
-        <path d="M-12 -35 a12 12 0 0 1 24 0 z" fill="#ffb02e"/>
-        <line x1="0" y1="-45" x2="0" y2="-52" stroke="#2b2760" stroke-width="2"/><circle class="blink" cx="0" cy="-53" r="3" fill="#ff6b81"/>
-        <rect x="-9" y="-31" width="18" height="5" rx="2.5" fill="#2b2760" opacity=".25"/></g>
-    </g></g>`;
-  const [zx,zy]=P(5.3,6.0,4.6);
-  s+=`<g id="zzz" class="zzz" style="display:none"><text x="${zx+6}" y="${zy}" fill="#fff" font-size="10">z</text><text x="${zx+10}" y="${zy-6}" fill="#fff" font-size="12">z</text><text x="${zx+14}" y="${zy-12}" fill="#fff" font-size="14">Z</text></g>`;
-  // sofa + plants front
-  s+=box(6.6,8.2,0,3,1.2,.8,"#3b3685","#2f2b6e","#28245e");
-  s+=box(6.6,9.1,.8,3,.3,.8,"#46409a","#2f2b6e","#28245e");
-  s+=plant(1.2,5.2); s+=plant(2.4,8.6);
+  // jendela (dinding kiri)
+  s+=poly(pts([0,3.2,3.2],[0,7.6,3.2],[0,7.6,6.4],[0,3.2,6.4]),"#a3a8c8");
+  s+=poly(pts([0,3.4,3.4],[0,7.4,3.4],[0,7.4,6.2],[0,3.4,6.2]),"url(#sky)");
+  s+=`<polyline points="${pts([0,5.4,3.4],[0,5.4,6.2])}" stroke="#a3a8c8" stroke-width="3"/>`;
+  s+=`<g id="sun">${(()=>{const [x,y]=P(0,4.3,5.5);return `<circle cx="${x}" cy="${y}" r="6" fill="#f3d38b"/>`})()}</g>`;
+  // rak buku (dinding kiri depan)
+  s+=box(0,8.3,0,.7,1.6,3.4,"#a07e66","#b8937a","#8c6d58");
+  ["#ec9a9a","#e9c483","#9db2f2"].forEach((c,i)=>{for(let r=0;r<3;r++){
+    s+=poly(pts([.7,8.45+i*.45,.4+r*1.05],[.7,8.8+i*.45,.4+r*1.05],[.7,8.8+i*.45,1.15+r*1.05],[.7,8.45+i*.45,1.15+r*1.05]),c);}});
+  // bingkai dinding kanan: grafik, kalender gotobi, jam, emas
+  const frame=(x0,z0,w,h,inner)=>poly(pts([x0,0,z0],[x0+w,0,z0],[x0+w,0,z0+h],[x0,0,z0+h]),"#3a3f5c")+inner;
+  s+=frame(.6,4.2,1.9,1.4,`<polyline class="chartline" fill="none" stroke="#8fd1b0" stroke-width="1.5" points="${pts([.8,0,4.5],[1.2,0,5.0],[1.6,0,4.7],[2.0,0,5.3],[2.3,0,5.1])}"/>`);
+  s+=frame(3.0,4.5,1.4,1.5,`<text id="cal" x="${P(3.7,0,5.15)[0]}" y="${P(3.7,0,5.15)[1]}" font-size="11" font-weight="800" fill="#fff" text-anchor="middle">--</text>
+    <text x="${P(3.7,0,4.75)[0]}" y="${P(3.7,0,4.75)[1]}" font-size="5.5" fill="#e9c483" text-anchor="middle">GOTOBI</text>`);
+  const [ckx,cky]=P(5.6,0,5.4);
+  s+=`<circle cx="${ckx}" cy="${cky}" r="10" fill="#fff" stroke="#3a3f5c" stroke-width="2"/>
+      <line id="hh" x1="${ckx}" y1="${cky}" x2="${ckx}" y2="${cky-5}" stroke="#3a3f5c" stroke-width="2" stroke-linecap="round"/>
+      <line id="mh" x1="${ckx}" y1="${cky}" x2="${ckx}" y2="${cky-8}" stroke="#6a5ad8" stroke-width="1.4" stroke-linecap="round"/>`;
+  s+=frame(6.8,4.3,1.9,1.4,`<polygon points="${pts([7.2,0,4.6],[8.3,0,4.6],[8.0,0,5.1],[7.5,0,5.1])}" fill="#e6c56a" stroke="#b99447" stroke-width="1"/>
+     <text x="${P(7.75,0,5.3)[0]}" y="${P(7.75,0,5.3)[1]}" font-size="5.5" fill="#e9c483" text-anchor="middle">XAU</text>`);
+  // server rack di pojok belakang kanan
+  s+=box(9.0,.3,0,.8,.9,2.6,"#4f5478","#434866","#3a3f5c");
+  [0,1,2].forEach(i=>{const [x,y]=P(9.8,.75,.6+i*.7);s+=`<circle class="led" style="animation-delay:${i*.35}s" cx="${x+2}" cy="${y}" r="1.7" fill="${i?'#8fd1b0':'#9db2f2'}"/>`});
+  s+=plant(.2,.2);
+  // meja: baris belakang dulu
+  s+=desk("asli")+desk("goto");
+  s+=plant(9.2,3.7);
+  s+=desk("kamis")+desk("emas");
+  // sofa kecil & tanaman depan
+  s+=plant(9.2,9.2);
   $("scene").innerHTML=s;
-  window._anchor={bubble:P(5.3,6.0,5.2), tag:P(8.6,6.4,2.4)};
+  $("tags").innerHTML=ORDER.map(k=>`<div class="tag" id="tag_${k}"><i></i><span>${BOTS[k].emoji} ${BOTS[k].nama}</span></div>`).join("");
+}
+function placeOverlays(){
+  const r=$("scene").getBoundingClientRect(), sc=r.width/400;
+  ORDER.forEach(k=>{ const [x,y]=ANCH[k].tag; Object.assign($("tag_"+k).style,{left:x*sc+"px",top:y*sc+"px"}); });
+  if(SPEAKER){ const [x,y]=ANCH[SPEAKER].head; Object.assign($("bubble").style,{left:Math.min(Math.max(x*sc,90),r.width-90)+"px",top:y*sc+"px"}); }
 }
 
-/* ===================== OTAK BOT (state & pikiran) ===================== */
-const THOUGHTS = {
-  bengong:["Lagi bengong aja nih… pasar jalan, aku santai 😶","Hmm, yen hari ini ngapain ya?","Ngopi dulu ah ☕ belum tanggal gotobi.","Ngecek kalender… tanggal kelipatan 5 masih jauh.",
-           "Kata backtest win rate-ku 60%. Semoga konsisten ya bos 🙏","Disiplin itu kuncinya. Nggak trading di luar jadwal!","Lagi baca-baca soal fixing Tokyo jam 09:55 JST 📚",
-           "Kalau kalah ya cuma 1%. Santai, yang penting konsisten.","Bosan juga nunggu… tapi sabar itu bagian dari strategi 😤","Ngelamun: kira-kira modal $100 jadi berapa ya akhir tahun? 🤔"],
-  tidur:["Zzz… jangan ganggu, bos 😴","Mimpi USD/JPY turun 50 pip… zzz","Zzz… bangunin aku jam 07:30 kalau gotobi ya"],
-  siaga:["Hari ini GOTOBI! Siap-siap, fixing Tokyo sebentar lagi 👀","Pemanasan jari… order SELL siap di 07:55 WIB","Perusahaan Jepang lagi beli dolar nih, nanti kita jual 😏","Fokus mode ON. Jangan ajak ngobrol dulu 🎯"],
-  posisi:["SELL USD/JPY kebuka! SL 10 pip, tahan sampai 08:20 ⏳","Ayo turun… ayo turun… 📉","Tahan napas. Jangan panik, SL sudah pasang.","Nggak boleh tutup duluan, aturan tetap aturan 💪"],
-  hitung:["Posisi ditutup jam 08:20. Lagi ngitung hasilnya… 🧮","Nunggu laporan resmi dari server, bentar ya…"],
-  menang:["CUAN! ✅ Trade hari ini profit, mantap bos!","Yen turun sesuai rencana 😎 laporan sudah dikirim ke Telegram.","Gotobi nggak bohong hari ini 🎉"],
-  kalah:["Kena SL hari ini ❌ Gapapa, cuma rugi 1%.","Kalah satu bukan berarti strateginya gagal. Lanjut tanggal berikutnya 💪","Pasar lagi nggak sejalan. Catat, evaluasi, lanjut."]
+/* ===================== OTAK PARA BOT ===================== */
+const T = {
+ goto:{
+  bengong:["Lagi bengong aja nih… pasar jalan, aku santai 😶","Ngecek kalender… tanggal kelipatan 5 masih jauh.","Disiplin itu kuncinya. Nggak trading di luar jadwal!",
+           "Close 08:20 itu hasil riset, Pak Asli. Data nggak bohong 😎","Nabung rutin $50 tiap 2 bulan = mesin utama. Aku cuma bonusnya.","Kalau kalah ya cuma 1%. Santai, yang penting konsisten."],
+  tidur:["Zzz… jangan ganggu, bos 😴","Mimpi USD/JPY turun 50 pip… zzz"],
+  siaga:["Hari ini GOTOBI! Fixing Tokyo sebentar lagi 👀","Perusahaan Jepang lagi beli dolar, nanti kita jual 😏","Fokus mode ON 🎯"],
+  posisi:["SELL kebuka! Tahan sampai 08:20 ⏳","Ayo turun… ayo turun… 📉","SL sudah pasang. Tenang."],
+  hitung:["Posisi tutup 08:20. Nunggu data resmi dulu… 🧮","Lagi ngitung hasil, bentar ya bos."],
+  menang:["CUAN! ✅ Gotobi nggak bohong hari ini 🎉","Laporan cuan sudah dikirim ke Telegram 😎"],
+  kalah:["Kena hari ini ❌ Cuma 1%, lanjut tanggal berikutnya 💪","Kalah satu bukan berarti strateginya gagal."]},
+ asli:{
+  bengong:["Anak muda buru-buru amat close 08:20… sabar sampai 08:30!","Dulu pola gotobi ini aku yang pertama coba, lho ☕","Cara lama itu teruji, Goto. Kita lihat siapa juara klasemen 😏",
+           "Kopi dulu. Pasar nggak akan lari.","Risiko 1% itu prinsip hidup, bukan cuma aturan trading."],
+  tidur:["Zzz… orang tua butuh istirahat 😴","Zzz… 08:30, bukan 08:20… zzz"],
+  siaga:["Gotobi hari ini. Siapkan sell, jangan grogi.","Pemanasan dulu… kacamata mana kacamata 👓"],
+  posisi:["Posisi jalan. Aku tahan sampai 08:30 sesuai aturan lama ⏳","Goto sudah keluar? Biar, aku tetap sabar."],
+  hitung:["Tunggu data resmi, jangan buru-buru 🧮"],
+  menang:["Hasil bagus ✅ Sabar sampai 08:30 terbayar!","Tuh kan, cara lama masih jalan 😎"],
+  kalah:["Hari ini kurang beruntung ❌ Besok lagi.","Kalah itu biasa. Yang penting nggak melanggar aturan."]},
+ kamis:{
+  bengong:["Aku karyawan shift malam 🌙 Siang ini cuma ngopi.","Polaku belum ada penjelasan. Makanya aku diuji dulu 🧪","Kamis dini hari itu jam kerjaku. Yang lain tidur, aku begadang 🦉",
+           "Kalau 6 dari 10 menang terus, berarti polaku nyata.","Tes dulu pakai uang virtual. Bos pinter 👍"],
+  tidur:["Zzz… shift malam, siangnya tidur 😴","Zzz… bangunin Kamis jam 02:00 ya…"],
+  siaga:["Kamis dini hari! 15 menit lagi BUY 👀","Kopi ketiga malam ini… siap kerja ☕"],
+  posisi:["BUY kebuka. Tahan 35 menit, SL 10 pip ⏳","Ayo naik… dolar, naik dong 📈"],
+  hitung:["Posisi tutup 02:50. Nunggu data resmi… 🧮"],
+  menang:["Cuan malam ini ✅ Begadangku nggak sia-sia 🌙","Satu poin lagi buat bukti polaku nyata!"],
+  kalah:["Kena SL malam ini ❌ Datanya tetap aku catat.","Kalah ya nggak apa-apa. Tujuanku memang diuji."]},
+ emas:{
+  bengong:["Emas suka naik pas Amerika tidur 😏","Divisi emas: aku sendirian, tapi bersinar 🥇","TP 1R itu sehat. Win rate bukan segalanya, bos!",
+           "Kenapa nggak trading Jumat? Hindari libur akhir pekan 😌","Risiko 0,5 ATR… ukurannya ikut keadaan pasar."],
+  tidur:["Zzz… nunggu sore New York 😴"],
+  siaga:["Sebentar lagi 16:30 New York. Siapkan BUY emas 👀","Pasar Amerika mau tutup… giliranku!"],
+  posisi:["BUY emas kebuka. Pegang semalaman sampai sesi Asia ⏳","Ayo emas, naik pelan-pelan 📈","Pasar istirahat sebentar, aku tetap pegang posisi 🌙"],
+  hitung:["Posisi tutup 03:00 New York. Nunggu data resmi… 🧮"],
+  menang:["Emas bersinar ✅ Cuan masuk!","Pola malam emas jalan lagi 😎"],
+  kalah:["Hari ini emas bandel ❌ Lanjut besok.","Kalah kecil, aturan tetap aturan."]},
 };
-function currentState(){
-  const now=wib(), mins=now.getUTCHours()*60+now.getUTCMinutes(), today=ymd(now);
-  const todayTrade=TRADES.find(t=>t.tanggal===today);
-  if(isGotobi(now)){
-    if(mins>=450 && mins<475) return "siaga";
-    if(mins>=475 && mins<500) return "posisi";
-    if(mins>=500 && mins<720) return todayTrade ? (+todayTrade.R>0?"menang":"kalah") : "hitung";
+function todayTrade(k){ const w=wib(); const d=w.toISOString().slice(0,10); return TR[k].find(t=>t.tanggal===d); }
+function stateOf(k){
+  const w=wib(), mins=w.getUTCHours()*60+w.getUTCMinutes(), dow=w.getUTCDay(), day=w.getUTCDate();
+  const res = t => t ? (+t.R>0?"menang":"kalah") : "hitung";
+  if(k==="goto"||k==="asli"){
+    const ex = k==="goto"?500:510;
+    if(GOTOBI.includes(day)&&dow>0&&dow<6){
+      if(mins>=450&&mins<475) return "siaga";
+      if(mins>=475&&mins<ex) return "posisi";
+      if(mins>=ex&&mins<720) return res(todayTrade(k));
+    }
+    return mins<300?"tidur":"bengong";
   }
-  if(mins<300) return "tidur";
+  if(k==="kamis"){
+    if(dow===4){
+      if(mins>=120&&mins<135) return "siaga";
+      if(mins>=135&&mins<170) return "posisi";
+      if(mins>=170&&mins<600) return res(todayTrade(k));
+    }
+    return (mins>=540&&mins<1020)?"tidur":"bengong";
+  }
+  // emas: pakai jam New York
+  const p=nyParts(new Date()), nm=p.h*60+p.mi;
+  if(p.dow>=1&&p.dow<=4){
+    if(nm>=960&&nm<990) return "siaga";
+    if(nm>=990) return "posisi";
+  }
+  if(p.dow>=2&&p.dow<=5){
+    if(nm<180) return "posisi";
+    if(nm>=180&&nm<600) return res(todayTrade(k));
+  }
   return "bengong";
 }
 const ANIM={bengong:"bob",tidur:"sleep",siaga:"bob type",posisi:"type",hitung:"type",menang:"party",kalah:"sad"};
-const TAGS={bengong:"Standby",tidur:"Tidur",siaga:"Siaga · gotobi hari ini",posisi:"Posisi SELL terbuka",hitung:"Menghitung hasil",menang:"Profit hari ini",kalah:"Kena SL hari ini"};
-let lastState=null, idx=0;
-function think(){
-  const st=currentState(); const list=THOUGHTS[st];
-  if(st!==lastState){ idx=Math.floor(Math.random()*list.length); lastState=st;
-    $("bot").setAttribute("class",ANIM[st]); $("zzz").style.display=st==="tidur"?"":"none"; $("tagtxt").textContent=TAGS[st];
-    $("tag").querySelector("i").style.background = st==="menang"?"var(--green)":st==="kalah"?"var(--red)":st==="posisi"?"var(--amber)":"var(--blue)"; }
-  const b=$("bubble"); b.classList.add("hide");
-  setTimeout(()=>{ $("say").textContent=list[idx%list.length]; idx++; b.classList.remove("hide"); },380);
+const TAGS={bengong:"Standby",tidur:"Tidur",siaga:"Siaga",posisi:"Posisi terbuka",hitung:"Menghitung",menang:"Profit",kalah:"Kena SL"};
+const DOT={menang:"var(--green)",kalah:"var(--red)",posisi:"var(--amber)",siaga:"var(--amber)",tidur:"var(--faint)"};
+let SPEAKER=null, turn=0;
+function updateStates(){
+  ORDER.forEach(k=>{
+    const st=stateOf(k);
+    $("bot_"+k).setAttribute("class",ANIM[st]);
+    $("zzz_"+k).style.display = st==="tidur"?"":"none";
+    const tg=$("tag_"+k); tg.querySelector("span").textContent=`${BOTS[k].emoji} ${BOTS[k].nama}, ${TAGS[st].toLowerCase()}`;
+    tg.querySelector("i").style.background=DOT[st]||"var(--blue)";
+  });
 }
-function placeOverlays(){
-  const svg=$("scene"), r=svg.getBoundingClientRect(), sc=r.width/400;
-  const [bx,by]=_anchor.bubble, [tx,ty]=_anchor.tag;
-  Object.assign($("bubble").style,{left:bx*sc+"px",top:by*sc+"px"});
-  Object.assign($("tag").style,{left:tx*sc+"px",top:ty*sc+"px"});
+function think(){
+  const order = TAB==="all" ? ORDER : [TAB];
+  // prioritaskan bot yang sedang sibuk
+  const busy = order.filter(k=>["siaga","posisi","hitung","menang","kalah"].includes(stateOf(k)));
+  const pool = busy.length && Math.random()<0.7 ? busy : order;
+  SPEAKER = pool[turn++ % pool.length];
+  let st=stateOf(SPEAKER), list=T[SPEAKER][st];
+  let line=list[Math.floor(Math.random()*list.length)];
+  // komentar adu Goto vs Asli di hari gotobi
+  const g=todayTrade("goto"), a=todayTrade("asli");
+  if(g&&a&&(SPEAKER==="goto"||SPEAKER==="asli")&&Math.random()<0.5){
+    const gp=+g.pips, ap=+a.pips;
+    line = SPEAKER==="goto" ? (gp>=ap?`Hari ini aku ${gp.toFixed(1)} pip, Asli ${ap.toFixed(1)}. Close 08:20 menang lagi 😎`:`Asli ${ap.toFixed(1)} pip, aku ${gp.toFixed(1)}. Oke, hari ini kamu menang, Pak 🙇`)
+                            : (ap>=gp?`Aku ${ap.toFixed(1)} pip, Goto ${gp.toFixed(1)}. Sabar itu ada hasilnya 😏`:`Goto ${gp.toFixed(1)}, aku ${ap.toFixed(1)}. Anak muda boleh juga 👏`);
+  }
+  const b=$("bubble"); b.classList.add("hide");
+  setTimeout(()=>{ $("who").textContent=BOTS[SPEAKER].emoji+" "+BOTS[SPEAKER].nama;
+    document.querySelectorAll(".tag").forEach(t=>t.classList.toggle("me",t.id==="tag_"+SPEAKER)); $("room").classList.toggle("focus",TAB==="all"); $("who").style.color="var(--accent)";
+    $("say").textContent=line; placeOverlays(); b.classList.remove("hide"); },380);
 }
 function tick(){
   const now=wib(); $("clock").textContent=fmtTime(now);
   const h=now.getUTCHours()%12, m=now.getUTCMinutes();
-  const [ckx,cky]=[+$("hh").getAttribute("x1"),+$("hh").getAttribute("y1")];
-  $("hh").setAttribute("transform",`rotate(${h*30+m/2} ${ckx} ${cky})`);
-  $("mh").setAttribute("transform",`rotate(${m*6} ${ckx} ${cky})`);
-  const H=now.getUTCHours(); const night=H<5||H>=19, dusk=H>=17&&H<19;
-  $("sky1").setAttribute("stop-color",night?"#1b1f4d":dusk?"#ff9a6b":"#7cc4ff");
-  $("sky2").setAttribute("stop-color",night?"#3a3f7a":dusk?"#ffd2a1":"#cfe8ff");
-  $("sun").querySelector("circle").setAttribute("fill",night?"#e8e6ff":"#ffd36b");
-  $("cal").textContent=nextGotobi().getUTCDate();
-  renderNext();
+  const cx=+$("hh").getAttribute("x1"), cy=+$("hh").getAttribute("y1");
+  $("hh").setAttribute("transform",`rotate(${h*30+m/2} ${cx} ${cy})`);
+  $("mh").setAttribute("transform",`rotate(${m*6} ${cx} ${cy})`);
+  const H=now.getUTCHours(), night=H<5||H>=19, dusk=H>=17&&H<19;
+  document.documentElement.style.setProperty("--room-light", night?0.82:dusk?0.93:1);
+  $("sky1").setAttribute("stop-color",night?"#2a2f55":dusk?"#e9a98a":"#9ecbf0");
+  $("sky2").setAttribute("stop-color",night?"#4a5185":dusk?"#f3d1b4":"#d9ebf8");
+  $("sun").querySelector("circle").setAttribute("fill",night?"#e6e6f5":"#f3d38b");
+  const ng=toWib(nextGotobi()); $("cal").textContent=ng.getUTCDate();
+  renderSched();
 }
+function render(){ renderTabs(); renderBoard(false); renderFeed(); renderSched(); updateStates(); }
 
-/* ===================== START ===================== */
-if(window.Telegram && Telegram.WebApp){ try{Telegram.WebApp.ready();Telegram.WebApp.expand();Telegram.WebApp.setHeaderColor("#13112a");Telegram.WebApp.setBackgroundColor("#13112a");}catch(e){} }
-scene(); placeOverlays(); window.addEventListener("resize",placeOverlays);
+/* ===================== MULAI ===================== */
+function applyTheme(){
+  let th=null;
+  try{ if(window.Telegram&&Telegram.WebApp&&Telegram.WebApp.colorScheme) th=Telegram.WebApp.colorScheme; }catch(e){}
+  if(th) document.documentElement.dataset.theme=th;
+  const bg=getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+  try{ Telegram.WebApp.setHeaderColor(bg); Telegram.WebApp.setBackgroundColor(bg); }catch(e){}
+}
+if(window.Telegram && Telegram.WebApp){ try{Telegram.WebApp.ready();Telegram.WebApp.expand();Telegram.WebApp.onEvent("themeChanged",applyTheme);}catch(e){} }
+applyTheme();
+scene(); render(); placeOverlays(); window.addEventListener("resize",()=>{placeOverlays();moveInd();});
 tick(); setInterval(tick,1000);
-loadTrades().then(think); setInterval(think,7000);
-setInterval(loadTrades,5*60*1000);
+loadAll().then(think); setInterval(think,6500); setInterval(updateStates,30000);
+setInterval(loadAll,5*60*1000);
 </script>
 </body>
 </html>
