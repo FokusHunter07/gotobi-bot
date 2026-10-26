@@ -64,6 +64,15 @@ header small{display:block;color:var(--muted);font-size:12px;font-weight:600;mar
 .stat span{display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px}
 .stat strong{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
 .pos{color:var(--green)} .neg{color:var(--red)}
+.spark{display:block;width:100%;height:64px;margin:14px 0 6px}
+.contrib{margin-top:8px;display:grid;gap:7px}
+.cb{display:grid;grid-template-columns:78px 1fr 64px;align-items:center;gap:8px;font-size:12px}
+.cb span{color:var(--muted);font-weight:700;white-space:nowrap}
+.cb b{text-align:right;font-variant-numeric:tabular-nums;font-size:12.5px}
+.bar{position:relative;height:8px;border-radius:99px;background:var(--soft)}
+.bar:after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line)}
+.bar i{position:absolute;top:0;bottom:0;border-radius:99px;transition:width .6s var(--ease)}
+.bar i.p{background:var(--green)} .bar i.n{background:var(--red)}
 .rank{list-style:none;margin-top:4px}
 .rank li{display:grid;grid-template-columns:30px 1fr auto;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
 .rank li:first-child{border-top:0}
@@ -178,8 +187,8 @@ const BOTS = {
 };
 const ORDER = ["goto","asli","kamis","emas"];
 let TR = {goto:[],asli:[],kamis:[],emas:[]};
-let TAB = "all";
-try{ TAB = localStorage.getItem("kantorTab") || "all"; }catch(e){}
+let TAB = "tim";
+try{ TAB = localStorage.getItem("kantorTab") || "tim"; }catch(e){}
 
 /* ===================== WAKTU ===================== */
 const wib = () => new Date(Date.now() + 7*3600e3);          // getUTC* = jam WIB
@@ -241,7 +250,7 @@ function stats(arr){
 
 /* ===================== PANEL ===================== */
 function renderTabs(){
-  const items=[["all","🏆 Klasemen"],...ORDER.map(k=>[k,BOTS[k].emoji+" "+BOTS[k].nama])];
+  const items=[["tim","🤝 Akun Tim"],["all","🏆 Klasemen"],...ORDER.map(k=>[k,BOTS[k].emoji+" "+BOTS[k].nama])];
   if(!$("tabs").children.length){
     $("tabs").innerHTML=`<span class="ind" id="ind"></span>`+items.map(([k,l])=>`<button data-k="${k}">${l}</button>`).join("");
     $("tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{ if(b.dataset.k===TAB) return; TAB=b.dataset.k;
@@ -268,7 +277,60 @@ function countUp(el,to,fmt){
   const step=now=>{ const k=Math.min(1,(now-t0)/dur), e=1-Math.pow(1-k,3); el.textContent=fmt(from+(to-from)*e); if(k<1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
 }
+/* ===================== AKUN TIM (satu dompet untuk 4 bot) ===================== */
+const DEF_IN={goto:"07:55",asli:"07:55",kamis:"02:15",emas:"03:30"}, DEF_OUT={goto:"08:20",asli:"08:30",kamis:"02:50",emas:"14:00"};
+function depDates(){ const out=[]; for(let k=1;k<300;k++){ let y=SIM_START[0], m=SIM_START[1]+DEP_EVERY*k; y+=Math.floor(m/12); m%=12;
+  const last=new Date(Date.UTC(y,m+1,0)).getUTCDate(); const d=Date.UTC(y,m,Math.min(SIM_START[2],last)); if(d>Date.now()+864e5) break; out.push(d);} return out; }
+function team(){
+  const ts=(d,hm)=>{const [h,m]=(hm||"00:00").split(":").map(Number);return Date.parse(d+"T00:00:00Z")+(h*60+m)*6e4;};
+  const ev=[]; ORDER.forEach(k=>TR[k].forEach(t=>ev.push({k,t,R:+t.R,ent:ts(t.tanggal,t.jam_entry_wib||DEF_IN[k]),ex:ts(t.tanggal,t.jam_keluar_wib||DEF_OUT[k])})));
+  ev.sort((a,b)=>a.ent-b.ent||ORDER.indexOf(a.k)-ORDER.indexOf(b.k));
+  const deps=depDates().map(d=>d+12*3.6e6); let di=0;
+  let bal=START, dep=START; const open=[], map={}, per={goto:0,asli:0,kamis:0,emas:0}, curve=[[ev.length?ev[0].ent:Date.now(),bal]];
+  const realize=t=>{ open.sort((a,b)=>a.ex-b.ex); while(open.length&&open[0].ex<=t){ const o=open.shift(); bal+=o.pl; curve.push([o.ex,bal]); } };
+  let idx=1,pk=1,dd=0,wins=0;
+  for(const e of ev){
+    realize(e.ent);
+    while(di<deps.length&&deps[di]<=e.ent){ bal+=DEPOSIT; dep+=DEPOSIT; di++; curve.push([e.ent,bal]); }
+    const risk=Math.max(1,bal*0.01), pl=Math.round(risk*e.R*100)/100;
+    open.push({ex:e.ex,pl}); map[e.k+"|"+e.t.tanggal]=pl; per[e.k]+=pl;
+    idx*=1+0.01*e.R; pk=Math.max(pk,idx); dd=Math.min(dd,(idx-pk)/pk); if(e.R>0) wins++;
+  }
+  realize(Infinity);
+  while(di<deps.length&&deps[di]<=Date.now()){ bal+=DEPOSIT; dep+=DEPOSIT; di++; curve.push([Date.now(),bal]); }
+  return {bal,dep,profit:bal-dep,ret:(bal-dep)/dep*100,n:ev.length,wr:ev.length?wins/ev.length*100:null,dd,per,map,curve,risk:Math.max(1,bal*0.01)};
+}
+function spark(curve){
+  if(curve.length<2) return `<div class="empty" style="padding:10px 0 0">Grafik saldo muncul setelah ada trade.</div>`;
+  const W=320,H=64, xs=curve.map(c=>c[0]), ys=curve.map(c=>c[1]);
+  const x0=Math.min(...xs),x1=Math.max(...xs)||x0+1,y0=Math.min(...ys,START)-0.5,y1=Math.max(...ys,START)+0.5;
+  const X=x=>((x-x0)/((x1-x0)||1))*W, Y=y=>H-((y-y0)/((y1-y0)||1))*H;
+  const d=curve.map((c,i)=>(i?"L":"M")+X(c[0]).toFixed(1)+" "+Y(c[1]).toFixed(1)).join(" ");
+  const up=ys[ys.length-1]>=START;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="Grafik saldo akun tim">
+    <line x1="0" x2="${W}" y1="${Y(START)}" y2="${Y(START)}" stroke="var(--line)" stroke-dasharray="3 4"/>
+    <path d="${d} L${W} ${H} L0 ${H} Z" fill="${up?'var(--green)':'var(--red)'}" opacity=".12"/>
+    <path d="${d}" fill="none" stroke="${up?'var(--green)':'var(--red)'}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`;
+}
 function renderBoard(animate){
+  if(TAB==="tim"){
+    const t=team(); const maxAbs=Math.max(0.01,...ORDER.map(k=>Math.abs(t.per[k])));
+    $("board").innerHTML=`<div class="top"><span>🤝 Akun Tim</span><b>1 dompet untuk 4 bot</b></div>
+     <div class="rule">Semua bot memakai saldo yang sama. Risiko tiap trade 1% dari saldo, minimal $1 (saat ini ${money(t.risk)} per trade). Setoran $${DEPOSIT} tiap 2 bulan.</div>
+     <div class="stats">
+      <div class="stat"><span>Saldo tim</span><strong id="cBal">${money(t.bal)}</strong></div>
+      <div class="stat"><span>Profit bersih</span><strong id="cProfit" class="${t.profit>=0?'pos':'neg'}">${(t.profit>=0?"+":"")+money(t.profit)}</strong></div>
+      <div class="stat"><span>Modal disetor</span><strong>$${t.dep.toFixed(0)}</strong></div>
+      <div class="stat"><span>Win rate</span><strong>${t.n?t.wr.toFixed(1)+"%":"–"}</strong></div>
+      <div class="stat"><span>Trade</span><strong>${t.n}</strong></div>
+      <div class="stat"><span>Max DD</span><strong>${(t.dd*100).toFixed(1)}%</strong></div>
+     </div>
+     ${spark(t.curve)}
+     <div class="contrib">${ORDER.map(k=>{const v=t.per[k],w=Math.abs(v)/maxAbs*50;
+       return `<div class="cb"><span>${BOTS[k].emoji} ${BOTS[k].nama}</span><div class="bar"><i class="${v>=0?'p':'n'}" style="width:${w}%;${v>=0?'left:50%':'right:50%'}"></i></div><b class="${v>=0?'pos':'neg'}">${(v>=0?"+":"")+money(v)}</b></div>`}).join("")}</div>`;
+    if(animate){ countUp($("cProfit"),t.profit,v=>(v>=0?"+":"")+money(v)); countUp($("cBal"),t.bal,money); }
+    return;
+  }
   if(TAB==="all"){
     const rows=ORDER.map(k=>({k,s:stats(TR[k])})).sort((a,b)=>(b.s.n?b.s.ret:-1e9)-(a.s.n?a.s.ret:-1e9));
     const medal=["🥇","🥈","🥉","4️⃣"];
@@ -293,9 +355,10 @@ function renderBoard(animate){
 }
 function renderFeed(){
   let all=[];
-  ORDER.forEach(k=>{ if(TAB==="all"||TAB===k) TR[k].forEach(t=>all.push({k,t})); });
+  ORDER.forEach(k=>{ if((TAB==="all"||TAB==="tim")||TAB===k) TR[k].forEach(t=>all.push({k,t})); });
   all.sort((a,b)=>(b.t.tanggal+(b.t.jam_entry_wib||"")).localeCompare(a.t.tanggal+(a.t.jam_entry_wib||"")));
-  $("feedTitle").textContent = TAB==="all" ? "Semua bot" : BOTS[TAB].emoji+" "+BOTS[TAB].nama;
+  $("feedTitle").textContent = TAB==="tim" ? "P/L dihitung di akun tim" : TAB==="all" ? "Semua bot" : BOTS[TAB].emoji+" "+BOTS[TAB].nama;
+  const TM = TAB==="tim" ? team().map : null;
   if(!all.length){ $("feed").innerHTML=`<li class="empty">Belum ada trade tercatat. Hasil pertama muncul di sini setelah jadwal berikutnya selesai.</li>`; return; }
   $("feed").innerHTML=all.slice(0,30).map(({k,t})=>{
     const b=BOTS[k], win=+t.R>0, d=new Date(t.tanggal+"T00:00:00Z");
@@ -303,7 +366,7 @@ function renderFeed(){
     const mv = b.unit==="pip" ? `${(+t.pips>0?"+":"")+(+t.pips).toFixed(1)} pip` : `${(+t.pips>0?"+":"")+(+t.pips).toFixed(2)} $/oz`;
     return `<li><div>${win?"✅":"❌"} ${b.emoji} <b>${b.nama}</b> <span style="color:var(--muted)">${HARI[d.getUTCDay()]} ${d.getUTCDate()} ${BULAN[d.getUTCMonth()]}</span>${dep}
       <div class="d">${t.arah||"SELL"} ${t.entry} ke ${t.exit}, ${t.hasil.toLowerCase()}</div></div>
-      <div class="r ${win?'pos':'neg'}">${mv}<div class="d">${money(+t.pl_usd)} (${(+t.R>0?"+":"")+(+t.R).toFixed(2)}R)</div></div></li>`}).join("");
+      <div class="r ${win?'pos':'neg'}">${mv}<div class="d">${money(TM?TM[k+"|"+t.tanggal]:+t.pl_usd)} (${(+t.R>0?"+":"")+(+t.R).toFixed(2)}R)</div></div></li>`}).join("");
 }
 
 /* ===================== JADWAL ===================== */
@@ -339,7 +402,7 @@ function nextDeposit(){
 function renderSched(){
   const g=nextGotobi(), ka=nextKamis(), em=nextEmas();
   const rows=[["goto",g,"SELL USD/JPY"],["asli",g,"SELL USD/JPY"],["kamis",ka,"BUY USD/JPY"],["emas",em,"BUY XAU/USD"]]
-    .filter(r=>TAB==="all"||TAB===r[0]).sort((a,b)=>a[1]-b[1]);
+    .filter(r=>(TAB==="all"||TAB==="tim")||TAB===r[0]).sort((a,b)=>a[1]-b[1]);
   $("sched").innerHTML=rows.map(([k,t,a])=>`<li><div class="w">${BOTS[k].emoji} ${BOTS[k].nama} <span style="color:var(--muted);font-weight:700">${a}</span><small>${fmtWib(t)}</small></div><div class="c">${countdown(t)}</div></li>`).join("");
   const nd=nextDeposit(); $("nextDep").innerHTML=`Setoran virtual berikutnya <b>$${DEPOSIT} per bot</b> pada ${nd.getUTCDate()} ${BULAN[nd.getUTCMonth()]} ${nd.getUTCFullYear()}`;
 }
@@ -526,7 +589,7 @@ function updateStates(){
   });
 }
 function think(){
-  const order = TAB==="all" ? ORDER : [TAB];
+  const order = (TAB==="all"||TAB==="tim") ? ORDER : [TAB];
   // prioritaskan bot yang sedang sibuk
   const busy = order.filter(k=>["siaga","posisi","hitung","menang","kalah"].includes(stateOf(k)));
   const pool = busy.length && Math.random()<0.7 ? busy : order;
@@ -542,7 +605,7 @@ function think(){
   }
   const b=$("bubble"); b.classList.add("hide");
   setTimeout(()=>{ $("who").textContent=BOTS[SPEAKER].emoji+" "+BOTS[SPEAKER].nama;
-    document.querySelectorAll(".tag").forEach(t=>t.classList.toggle("me",t.id==="tag_"+SPEAKER)); $("room").classList.toggle("focus",TAB==="all"); $("who").style.color="var(--accent)";
+    document.querySelectorAll(".tag").forEach(t=>t.classList.toggle("me",t.id==="tag_"+SPEAKER)); $("room").classList.toggle("focus",(TAB==="all"||TAB==="tim")); $("who").style.color="var(--accent)";
     $("say").textContent=line; placeOverlays(); b.classList.remove("hide"); },380);
 }
 function tick(){

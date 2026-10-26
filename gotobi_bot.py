@@ -547,6 +547,7 @@ def stats_text(key, trades):
 # ====================== MODE ======================
 def cmd_report():
     now = dt.datetime.now(UTC)
+    any_new = False
     for key in ORDER:
         eng = ENGINES[key]
         c = BOTS[key]
@@ -606,6 +607,7 @@ def cmd_report():
             print(f"{c['nama']}: tidak ada trade baru.")
             continue
         save_trades(key, trades)
+        any_new = True
         for r in new:
             if float(r.get("setoran") or 0) > 0:
                 send_telegram(f"💰 <b>{c['emoji']} {c['nama']}: setoran virtual +${float(r['setoran']):.0f}</b> "
@@ -621,6 +623,62 @@ def cmd_report():
                 f"Hasil: <b>{gerak} = {float(r['R']):+.2f}R = ${float(r['pl_usd']):+.2f}</b>\n"
                 f"Lot simulasi: {r['lot']} (risiko ${r['risiko_usd']}) · data: {r['sumber']}\n\n"
                 + stats_text(key, [t for t in trades if t["tanggal"] <= r["tanggal"]]))
+    if any_new:
+        send_telegram(team_text())
+
+
+# ====================== AKUN TIM (satu dompet untuk semua bot) ======================
+TEAM_MIN_RISK = 1.0      # risiko minimal per trade ($) saat saldo di bawah $100
+DEF_IN = {"goto": "07:55", "asli": "07:55", "kamis": "02:15", "emas": "03:30"}
+DEF_OUT = {"goto": "08:20", "asli": "08:30", "kamis": "02:50", "emas": "14:00"}
+
+
+def team():
+    """Simulasi satu saldo bersama: risiko = maks($1, 1% saldo saat entry).
+    Posisi yang belum ditutup tidak memengaruhi saldo untuk trade berikutnya."""
+    def ts(d, hm):
+        h, m = map(int, (hm or "00:00").split(":"))
+        return dt.datetime.fromisoformat(d).replace(hour=h, minute=m)
+    ev = []
+    for k in ORDER:
+        for t in load_trades(k):
+            ev.append((ts(t["tanggal"], t.get("jam_entry_wib") or DEF_IN[k]), ORDER.index(k), k,
+                       float(t["R"]), ts(t["tanggal"], t.get("jam_keluar_wib") or DEF_OUT[k])))
+    ev.sort()
+    deps = []
+    k = 1
+    today = dt.datetime.now(WIB).date()
+    while add_months(SIM_START, DEPOSIT_EVERY_MONTHS * k) <= today:
+        deps.append(dt.datetime.combine(add_months(SIM_START, DEPOSIT_EVERY_MONTHS * k), dt.time(12)))
+        k += 1
+    bal, dep, opened, per, wins = START_BALANCE, START_BALANCE, [], {x: 0.0 for x in ORDER}, 0
+    di = 0
+    for ent, _, key, R, ex in ev:
+        for o in sorted(o for o in opened if o[0] <= ent):
+            bal += o[1]
+            opened.remove(o)
+        while di < len(deps) and deps[di] <= ent:
+            bal += DEPOSIT_USD; dep += DEPOSIT_USD; di += 1
+        risk = max(TEAM_MIN_RISK, bal * RISK_PCT / 100)
+        pl = round(risk * R, 2)
+        opened.append((ex, pl))
+        per[key] += pl
+        wins += R > 0
+    bal += sum(o[1] for o in opened)
+    while di < len(deps):
+        bal += DEPOSIT_USD; dep += DEPOSIT_USD; di += 1
+    return dict(bal=bal, dep=dep, profit=bal - dep, n=len(ev), wr=wins / len(ev) * 100 if ev else 0,
+                per=per, risk=max(TEAM_MIN_RISK, bal * RISK_PCT / 100))
+
+
+def team_text():
+    t = team()
+    parts = " · ".join(f"{BOTS[k]['emoji']} {t['per'][k]:+.2f}" for k in ORDER)
+    return (f"🤝 <b>Akun Tim</b> (1 dompet untuk 4 bot)\n"
+            f"Saldo ${t['bal']:.2f} | disetor ${t['dep']:.0f} | profit ${t['profit']:+.2f} "
+            f"({t['profit'] / t['dep'] * 100:+.1f}%)\n"
+            f"{t['n']} trade · menang {t['wr']:.0f}% · risiko berikutnya ${t['risk']:.2f}\n"
+            f"Kontribusi: {parts}")
 
 
 def klasemen_text():
@@ -639,7 +697,8 @@ def klasemen_text():
         else:
             lines.append(f"{medal[i]} {c['emoji']} <b>{c['nama']}</b> ({c['pasar']}): belum ada trade")
     nd = next_deposit(dt.datetime.now(WIB).date())
-    lines.append(f"\n💰 Setoran virtual berikutnya: ${DEPOSIT_USD:.0f} per bot pada {nd:%d-%m-%Y}")
+    lines.append(f"\n💰 Setoran virtual berikutnya: ${DEPOSIT_USD:.0f} pada {nd:%d-%m-%Y}")
+    lines.append("\n" + team_text())
     return "\n".join(lines)
 
 
