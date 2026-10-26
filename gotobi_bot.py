@@ -629,21 +629,28 @@ def cmd_report():
 
 # ====================== AKUN TIM (satu dompet untuk semua bot) ======================
 TEAM_MIN_RISK = 1.0      # risiko minimal per trade ($) saat saldo di bawah $100
+TEAM_BOTS = ["goto", "asli", "kamis"]   # Emas tidak ikut: lot 0,01 emas (~$33 risiko) terlalu besar untuk modal kecil
+
+
+def lot_risk(price):
+    """Risiko $ untuk 0,01 lot USD/JPY dengan SL 10 pip."""
+    return 100.0 / price
 DEF_IN = {"goto": "07:55", "asli": "07:55", "kamis": "02:15", "emas": "03:30"}
 DEF_OUT = {"goto": "08:20", "asli": "08:30", "kamis": "02:50", "emas": "14:00"}
 
 
 def team():
-    """Simulasi satu saldo bersama: risiko = maks($1, 1% saldo saat entry).
-    Posisi yang belum ditutup tidak memengaruhi saldo untuk trade berikutnya."""
+    """Simulasi satu saldo bersama untuk bot USD/JPY, seperti EA nanti:
+    target risiko = maks($1, 1% saldo), dibulatkan ke bawah ke kelipatan 0,01 lot (minimal 0,01)."""
     def ts(d, hm):
         h, m = map(int, (hm or "00:00").split(":"))
         return dt.datetime.fromisoformat(d).replace(hour=h, minute=m)
     ev = []
-    for k in ORDER:
+    for k in TEAM_BOTS:
         for t in load_trades(k):
             ev.append((ts(t["tanggal"], t.get("jam_entry_wib") or DEF_IN[k]), ORDER.index(k), k,
-                       float(t["R"]), ts(t["tanggal"], t.get("jam_keluar_wib") or DEF_OUT[k])))
+                       float(t["R"]), ts(t["tanggal"], t.get("jam_keluar_wib") or DEF_OUT[k]),
+                       float(t["entry"]), float(t["pips"])))
     ev.sort()
     deps = []
     k = 1
@@ -651,33 +658,37 @@ def team():
     while add_months(SIM_START, DEPOSIT_EVERY_MONTHS * k) <= today:
         deps.append(dt.datetime.combine(add_months(SIM_START, DEPOSIT_EVERY_MONTHS * k), dt.time(12)))
         k += 1
-    bal, dep, opened, per, wins = START_BALANCE, START_BALANCE, [], {x: 0.0 for x in ORDER}, 0
+    bal, dep, opened, per, wins = START_BALANCE, START_BALANCE, [], {x: 0.0 for x in TEAM_BOTS}, 0
+    last_px = 155.0
     di = 0
-    for ent, _, key, R, ex in ev:
+    for ent, _, key, R, ex, price, pips in ev:
         for o in sorted(o for o in opened if o[0] <= ent):
             bal += o[1]
             opened.remove(o)
         while di < len(deps) and deps[di] <= ent:
             bal += DEPOSIT_USD; dep += DEPOSIT_USD; di += 1
         risk = max(TEAM_MIN_RISK, bal * RISK_PCT / 100)
-        pl = round(risk * R, 2)
+        n = max(1, int(risk / lot_risk(price) + 1e-9))      # jumlah 0,01 lot
+        pl = round(n * pips * 10 / price, 2)
+        last_px = price
         opened.append((ex, pl))
         per[key] += pl
         wins += R > 0
     bal += sum(o[1] for o in opened)
     while di < len(deps):
         bal += DEPOSIT_USD; dep += DEPOSIT_USD; di += 1
+    n_next = max(1, int(max(TEAM_MIN_RISK, bal * RISK_PCT / 100) / lot_risk(last_px) + 1e-9))
     return dict(bal=bal, dep=dep, profit=bal - dep, n=len(ev), wr=wins / len(ev) * 100 if ev else 0,
-                per=per, risk=max(TEAM_MIN_RISK, bal * RISK_PCT / 100))
+                per=per, lot=n_next / 100, risk=n_next * lot_risk(last_px))
 
 
 def team_text():
     t = team()
-    parts = " · ".join(f"{BOTS[k]['emoji']} {t['per'][k]:+.2f}" for k in ORDER)
-    return (f"🤝 <b>Akun Tim</b> (1 dompet untuk 4 bot)\n"
+    parts = " · ".join(f"{BOTS[k]['emoji']} {t['per'][k]:+.2f}" for k in TEAM_BOTS)
+    return (f"🤝 <b>Akun Tim</b> (3 bot USD/JPY, 1 dompet)\n"
             f"Saldo ${t['bal']:.2f} | disetor ${t['dep']:.0f} | profit ${t['profit']:+.2f} "
             f"({t['profit'] / t['dep'] * 100:+.1f}%)\n"
-            f"{t['n']} trade · menang {t['wr']:.0f}% · risiko berikutnya ${t['risk']:.2f}\n"
+            f"{t['n']} trade · menang {t['wr']:.0f}% · lot berikutnya {t['lot']:.2f} (risiko ${t['risk']:.2f})\n"
             f"Kontribusi: {parts}")
 
 

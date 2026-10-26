@@ -281,24 +281,29 @@ function countUp(el,to,fmt){
 const DEF_IN={goto:"07:55",asli:"07:55",kamis:"02:15",emas:"03:30"}, DEF_OUT={goto:"08:20",asli:"08:30",kamis:"02:50",emas:"14:00"};
 function depDates(){ const out=[]; for(let k=1;k<300;k++){ let y=SIM_START[0], m=SIM_START[1]+DEP_EVERY*k; y+=Math.floor(m/12); m%=12;
   const last=new Date(Date.UTC(y,m+1,0)).getUTCDate(); const d=Date.UTC(y,m,Math.min(SIM_START[2],last)); if(d>Date.now()+864e5) break; out.push(d);} return out; }
+const TEAM=["goto","asli","kamis"];          // Emas tidak ikut: lot 0,01 emas terlalu besar untuk modal kecil
+const lotRisk = e => 100/e;                   // risiko $ untuk 0,01 lot USD/JPY dengan SL 10 pip
 function team(){
   const ts=(d,hm)=>{const [h,m]=(hm||"00:00").split(":").map(Number);return Date.parse(d+"T00:00:00Z")+(h*60+m)*6e4;};
-  const ev=[]; ORDER.forEach(k=>TR[k].forEach(t=>ev.push({k,t,R:+t.R,ent:ts(t.tanggal,t.jam_entry_wib||DEF_IN[k]),ex:ts(t.tanggal,t.jam_keluar_wib||DEF_OUT[k])})));
+  const ev=[]; TEAM.forEach(k=>TR[k].forEach(t=>ev.push({k,t,R:+t.R,ent:ts(t.tanggal,t.jam_entry_wib||DEF_IN[k]),ex:ts(t.tanggal,t.jam_keluar_wib||DEF_OUT[k])})));
   ev.sort((a,b)=>a.ent-b.ent||ORDER.indexOf(a.k)-ORDER.indexOf(b.k));
   const deps=depDates().map(d=>d+12*3.6e6); let di=0;
-  let bal=START, dep=START; const open=[], map={}, per={goto:0,asli:0,kamis:0,emas:0}, curve=[[ev.length?ev[0].ent:Date.now(),bal]];
+  let bal=START, dep=START; const open=[], map={}, per={goto:0,asli:0,kamis:0}, curve=[[ev.length?ev[0].ent:Date.now(),bal]];
   const realize=t=>{ open.sort((a,b)=>a.ex-b.ex); while(open.length&&open[0].ex<=t){ const o=open.shift(); bal+=o.pl; curve.push([o.ex,bal]); } };
   let idx=1,pk=1,dd=0,wins=0;
   for(const e of ev){
     realize(e.ent);
     while(di<deps.length&&deps[di]<=e.ent){ bal+=DEPOSIT; dep+=DEPOSIT; di++; curve.push([e.ent,bal]); }
-    const risk=Math.max(1,bal*0.01), pl=Math.round(risk*e.R*100)/100;
+    const risk=Math.max(1,bal*0.01), price=+e.t.entry||155, n=Math.max(1,Math.floor(risk/lotRisk(price)+1e-9));
+    const pl=Math.round(n*(+e.t.pips)*(10/price)*100)/100;
     open.push({ex:e.ex,pl}); map[e.k+"|"+e.t.tanggal]=pl; per[e.k]+=pl;
     idx*=1+0.01*e.R; pk=Math.max(pk,idx); dd=Math.min(dd,(idx-pk)/pk); if(e.R>0) wins++;
   }
   realize(Infinity);
   while(di<deps.length&&deps[di]<=Date.now()){ bal+=DEPOSIT; dep+=DEPOSIT; di++; curve.push([Date.now(),bal]); }
-  return {bal,dep,profit:bal-dep,ret:(bal-dep)/dep*100,n:ev.length,wr:ev.length?wins/ev.length*100:null,dd,per,map,curve,risk:Math.max(1,bal*0.01)};
+  const lastPx=(ev.length?+ev[ev.length-1].t.entry:0)||155, nextLot=Math.max(1,Math.floor(Math.max(1,bal*0.01)/lotRisk(lastPx)+1e-9));
+  return {bal,dep,profit:bal-dep,ret:(bal-dep)/dep*100,n:ev.length,wr:ev.length?wins/ev.length*100:null,dd,per,map,curve,
+          lot:nextLot/100,risk:nextLot*lotRisk(lastPx)};
 }
 function spark(curve){
   if(curve.length<2) return `<div class="empty" style="padding:10px 0 0">Grafik saldo muncul setelah ada trade.</div>`;
@@ -314,9 +319,9 @@ function spark(curve){
 }
 function renderBoard(animate){
   if(TAB==="tim"){
-    const t=team(); const maxAbs=Math.max(0.01,...ORDER.map(k=>Math.abs(t.per[k])));
-    $("board").innerHTML=`<div class="top"><span>🤝 Akun Tim</span><b>1 dompet untuk 4 bot</b></div>
-     <div class="rule">Semua bot memakai saldo yang sama. Risiko tiap trade 1% dari saldo, minimal $1 (saat ini ${money(t.risk)} per trade). Setoran $${DEPOSIT} tiap 2 bulan.</div>
+    const t=team(); const maxAbs=Math.max(0.01,...TEAM.map(k=>Math.abs(t.per[k])));
+    $("board").innerHTML=`<div class="top"><span>🤝 Akun Tim</span><b>3 bot USD/JPY, 1 dompet</b></div>
+     <div class="rule">Goto, Asli, dan Kamis memakai saldo yang sama, seperti EA nanti. Target risiko 1% saldo (minimal $1), dibulatkan ke lot 0,01. Lot berikutnya ${t.lot.toFixed(2)} (risiko ${money(t.risk)}). Setoran $${DEPOSIT} tiap 2 bulan. Emas tidak ikut sampai modal sekitar $3.300.</div>
      <div class="stats">
       <div class="stat"><span>Saldo tim</span><strong id="cBal">${money(t.bal)}</strong></div>
       <div class="stat"><span>Profit bersih</span><strong id="cProfit" class="${t.profit>=0?'pos':'neg'}">${(t.profit>=0?"+":"")+money(t.profit)}</strong></div>
@@ -326,7 +331,7 @@ function renderBoard(animate){
       <div class="stat"><span>Max DD</span><strong>${(t.dd*100).toFixed(1)}%</strong></div>
      </div>
      ${spark(t.curve)}
-     <div class="contrib">${ORDER.map(k=>{const v=t.per[k],w=Math.abs(v)/maxAbs*50;
+     <div class="contrib">${TEAM.map(k=>{const v=t.per[k],w=Math.abs(v)/maxAbs*50;
        return `<div class="cb"><span>${BOTS[k].emoji} ${BOTS[k].nama}</span><div class="bar"><i class="${v>=0?'p':'n'}" style="width:${w}%;${v>=0?'left:50%':'right:50%'}"></i></div><b class="${v>=0?'pos':'neg'}">${(v>=0?"+":"")+money(v)}</b></div>`}).join("")}</div>`;
     if(animate){ countUp($("cProfit"),t.profit,v=>(v>=0?"+":"")+money(v)); countUp($("cBal"),t.bal,money); }
     return;
@@ -355,7 +360,7 @@ function renderBoard(animate){
 }
 function renderFeed(){
   let all=[];
-  ORDER.forEach(k=>{ if((TAB==="all"||TAB==="tim")||TAB===k) TR[k].forEach(t=>all.push({k,t})); });
+  ORDER.forEach(k=>{ if(TAB==="all"||TAB===k||(TAB==="tim"&&TEAM.includes(k))) TR[k].forEach(t=>all.push({k,t})); });
   all.sort((a,b)=>(b.t.tanggal+(b.t.jam_entry_wib||"")).localeCompare(a.t.tanggal+(a.t.jam_entry_wib||"")));
   $("feedTitle").textContent = TAB==="tim" ? "P/L dihitung di akun tim" : TAB==="all" ? "Semua bot" : BOTS[TAB].emoji+" "+BOTS[TAB].nama;
   const TM = TAB==="tim" ? team().map : null;
