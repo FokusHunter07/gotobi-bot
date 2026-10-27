@@ -2,12 +2,15 @@ name: Gotobi Paper Trading Bot
 
 on:
   schedule:
-    - cron: "20 0 * * 1-5"   # 07:20 WIB  -> pengingat sinyal (hanya jika tanggal gotobi)
-    - cron: "35 1 * * 1-5"   # 08:35 WIB  -> percobaan laporan pertama
-    - cron: "40 2 * * 1-5"   # 09:40 WIB  -> laporan hasil (data Dukascopy biasanya sudah tersedia)
-    - cron: "30 3 * * 1-5"   # 10:30 WIB  -> cadangan (jika jadwal sebelumnya telat/gagal)
+    - cron: "20 0 * * 1-5"   # 07:20 WIB  -> pengingat gotobi (Goto & Asli, hanya di tanggal gotobi)
+    - cron: "35 1 * * 1-5"   # 08:35 WIB  -> laporan (Kamis, Senin malam, percobaan pertama Goto/Asli)
+    - cron: "40 2 * * 1-5"   # 09:40 WIB  -> laporan Goto & Asli (data Dukascopy biasanya sudah ada)
+    - cron: "30 3 * * 1-5"   # 10:30 WIB  -> cadangan
+    - cron: "40 9 * * 1-5"   # 16:40 WIB  -> laporan Emas (posisi tutup 14:00/15:00 WIB)
     - cron: "0 12 * * 1-5"   # 19:00 WIB  -> cadangan kedua
-    - cron: "0 2 1 * *"      # tgl 1 tiap bulan 09:00 WIB -> ringkasan bulanan
+    - cron: "35 1 * * 6"     # Sabtu 08:35 WIB -> laporan Jumat (posisi tutup Sabtu 02:40 WIB)
+    - cron: "0 4 * * 6"      # Sabtu 11:00 WIB -> cadangan
+    - cron: "0 2 1 * *"      # tgl 1 tiap bulan 09:00 WIB -> klasemen bulanan
   workflow_dispatch:
     inputs:
       mode:
@@ -33,7 +36,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests tzdata
 
       - name: Tentukan mode
         id: mode
@@ -57,10 +60,13 @@ jobs:
 
       - name: Simpan catatan trade
         run: |
-          if [ -f trades.csv ] && [ -n "$(git status --porcelain trades.csv)" ]; then
-            git config user.name "gotobi-bot"
-            git config user.email "gotobi-bot@users.noreply.github.com"
-            git add trades.csv
-            git commit -m "Catat trade gotobi $(date -u +%Y-%m-%d)"
+          git config user.name "gotobi-bot"
+          git config user.email "gotobi-bot@users.noreply.github.com"
+          git add trades*.csv xau_hourly.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "Tidak ada catatan baru."
+          else
+            git commit -m "Catat trade $(date -u +%Y-%m-%d)"
+            git pull --rebase
             git push
           fi
