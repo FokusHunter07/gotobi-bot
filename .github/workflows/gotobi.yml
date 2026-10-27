@@ -6,8 +6,8 @@ on:
     - cron: "35 1 * * 1-5"   # 08:35 WIB  -> laporan (Kamis, Senin malam, percobaan pertama Goto/Asli)
     - cron: "40 2 * * 1-5"   # 09:40 WIB  -> laporan Goto & Asli (data Dukascopy biasanya sudah ada)
     - cron: "30 3 * * 1-5"   # 10:30 WIB  -> cadangan
-    - cron: "40 9 * * 1-5"   # 16:40 WIB  -> laporan Emas (posisi tutup 14:00/15:00 WIB)
-    - cron: "0 12 * * 1-5"   # 19:00 WIB  -> cadangan kedua
+    - cron: "10 11 * * 1-5"  # 18:10 WIB  -> laporan Emas (posisi tutup 14:00/15:00 WIB)
+    - cron: "30 13 * * 1-5"  # 20:30 WIB  -> cadangan kedua
     - cron: "35 1 * * 6"     # Sabtu 08:35 WIB -> laporan Jumat (posisi tutup Sabtu 02:40 WIB)
     - cron: "0 4 * * 6"      # Sabtu 11:00 WIB -> cadangan
     - cron: "0 2 1 * *"      # tgl 1 tiap bulan 09:00 WIB -> klasemen bulanan
