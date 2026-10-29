@@ -1,2 +1,3 @@
 tanggal,hari,arah,entry,stop_loss,take_profit,exit,jam_entry_wib,jam_keluar_wib,hasil,pips,R,risiko_usd,pl_usd,saldo,lot,sumber,setoran,modal_disetor
 2026-10-22,Kamis,BUY,158.299,158.199,,158.199,02:15,02:29,Kena SL,-10.0,-1.00,1.00,-1.00,99.00,0.0158,Dukascopy,0.00,100.00
+2026-10-29,Kamis,BUY,157.859,157.759,,157.935,02:15,02:50,Tutup waktu,7.6,0.76,0.99,0.75,99.75,0.0156,Dukascopy,0.00,100.00
